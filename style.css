@@ -1,0 +1,44 @@
+body {
+  margin: 0;
+  overflow: hidden;
+  background: black;
+}
+
+canvas {
+  display: block;
+}
+
+.popup {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0,0,0,0.8);
+  color: white;
+  padding: 20px;
+  border: 1px solid white;
+  z-index: 10;
+  max-width: 400px;
+  text-align: center;
+}
+
+.admin-panel {
+  position: absolute;
+  top: 10%;
+  left: 10%;
+  background: rgba(0,0,0,0.8);
+  color: white;
+  padding: 20px;
+  border: 1px solid white;
+  z-index: 10;
+  max-height: 80vh;
+  overflow: auto;
+  width: 80%;
+}
+
+#adminButton {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 10;
+}
