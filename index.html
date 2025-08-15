@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Star Chart — Detailed Closeups</title>
+  <title>Star Chart — Cinematic Zoom</title>
 
   <!-- Electrolize font -->
   <link href="https://fonts.googleapis.com/css2?family=Electrolize&display=swap" rel="stylesheet">
@@ -35,11 +35,16 @@
     <div id="tooltipContent"></div>
   </div>
 
-  <!-- Title card (fixed, top-right). Node hover shows the details here (no duplicate) -->
-  <div id="titleCard" class="title-card" style="display:none;">
-    <div id="titleCardInner">
+  <!-- Title card (fixed, top-right). Shows on top of hologram.
+       Click it to expand to full details. -->
+  <div id="titleCard" class="title-card" style="display:none;" role="dialog" aria-hidden="true">
+    <div id="titleCardInner" class="collapsed">
       <div id="titleCardTitle" class="electro"></div>
       <div id="titleCardDesc"></div>
+      <div id="titleCardActions" style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end;">
+        <button id="openDetailsBtn">Open</button>
+        <button id="closeCardBtn">Close</button>
+      </div>
     </div>
   </div>
 
