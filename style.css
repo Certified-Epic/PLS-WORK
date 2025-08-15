@@ -1,3 +1,4 @@
+/* style.css */
 :root{
   --bg:#000;
   --fg:#ddd;
@@ -26,13 +27,13 @@ canvas{display:block;width:100vw;height:100vh}
 
 /* tooltip (planet/tier only) - no hologram here */
 .tooltip{
-  position:fixed;pointer-events:none;z-index:90;display:flex;align-items:flex-start;width:var(--tooltip-w);transform:translate(12px,12px);
+  position:fixed;top:12px;left:50%;transform:translateX(-50%);pointer-events:none;z-index:90;display:flex;align-items:flex-start;width:var(--tooltip-w);
 }
 #tooltipContent{background:rgba(0,0,0,0.62);padding:10px;border-radius:8px;color:var(--fg);font-size:13px;line-height:1.2;border:1px solid rgba(255,255,255,0.06)}
 
-/* title card (node hover) - fixed top-right */
+/* title card (node hover) - fixed top-center */
 .title-card{
-  position:fixed;right:18px;top:80px;pointer-events:none;z-index:120;display:flex;justify-content:center;align-items:center;
+  position:fixed;left:50%;top:80px;transform:translateX(-50%);pointer-events:none;z-index:120;display:flex;justify-content:center;align-items:center;
   transition:opacity .18s ease, transform .18s ease;opacity:0;transform:translateY(6px) scale(.98);
 }
 .title-card.show{opacity:1;transform:translateY(0) scale(1)}
@@ -41,15 +42,21 @@ canvas{display:block;width:100vw;height:100vh}
   border-radius:10px;padding:12px 14px;border:1px solid rgba(255,255,255,0.06);max-width:320px;
   box-shadow: 0 10px 40px rgba(0,0,0,0.6);
 }
-.title-card .electro{font-family:var(--font-main);font-size:14px;color:var(--fg);margin-bottom:6px}
+.title-card .electro{font-family:var(--font-main);font-size:14px;color:var(--fg);margin-bottom:6px;text-shadow: 0 0 4px var(--accent);}
 .title-card #titleCardDesc{font-size:12px;color:rgba(255,255,255,0.9);line-height:1.2}
 
 /* popup */
 .popup{
   position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:115;background:rgba(0,0,0,0.92);
   padding:18px;border-radius:12px;color:var(--fg);border:1px solid rgba(255,255,255,0.06);max-width:520px;
+  animation: fadeIn 0.3s ease;
 }
 .popup button{padding:8px;border-radius:6px;background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--fg);cursor:pointer}
+
+@keyframes fadeIn {
+  from {opacity:0; transform: translate(-50%, -60%);}
+  to {opacity:1; transform: translate(-50%, -50%);}
+}
 
 /* admin */
 .admin-panel{
@@ -73,3 +80,6 @@ canvas{display:block;width:100vw;height:100vh}
 body.loading::after{
   content:'Loading...';position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:200;color:var(--fg);opacity:0.6;font-size:12px;
 }
+
+/* holographic effects */
+#ui, .tooltip, .title-card, .popup { text-shadow: 0 0 4px var(--accent); border-color: rgba(var(--accent), 0.2); }
