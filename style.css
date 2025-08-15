@@ -1,39 +1,47 @@
 :root{
-  --bg:#000;
-  --fg:#e7e7e7;
-  --muted:#9aa3aa;
-  --accent:#8af3ff;
-  --accent-weak: rgba(138,243,255,0.25);
-  --accent-strong: rgba(138,243,255,0.9);
-  --font-main: "Electrolize", Arial, sans-serif;
+  --bg: #000;
+  --fg: #e8eef6;
+  --accent: #00c8ff;
+  --card-bg: rgba(6,8,12,0.85);
+  --font-main: 'Electrolize', Arial, sans-serif;
 }
-*{box-sizing:border-box}
-html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-main);user-select:none}
-canvas{display:block;width:100vw;height:100vh}
 
-/* Top UI bar */
-.ui-bar{position:fixed;top:12px;left:12px;display:flex;gap:10px;align-items:center;padding:8px 10px;background:rgba(20,20,22,0.65);backdrop-filter:blur(6px);border-radius:12px;z-index:40;border:1px solid rgba(255,255,255,0.06)}
-.ui-item{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
-.ui-item.small{font-size:11px}
-.ui-bar input[type="color"], .ui-bar select, .ui-bar button{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:var(--fg);padding:6px 8px;border-radius:8px}
+/* Basic layout */
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-main);overflow:hidden}
+#threeCanvas{display:block;width:100vw;height:100vh}
 
-/* Hover card */
-.hover-card{position:fixed;pointer-events:none;padding:8px 10px;background:rgba(10,12,14,0.9);border-radius:10px;border:1px solid rgba(255,255,255,0.06);color:var(--fg);font-size:12px;opacity:0;transform:translate(-50%,-160%) scale(.98);transition:opacity .15s ease, transform .18s ease;z-index:45;max-width:260px;text-align:center}
-.hover-card.show{opacity:1;transform:translate(-50%,-160%) scale(1)}
+/* UI controls */
+#ui{
+  position:fixed;left:12px;top:12px;z-index:20;background:rgba(0,0,0,0.5);padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);
+  display:flex;gap:10px;align-items:center;
+}
+#ui label{display:flex;align-items:center;gap:6px;font-size:14px}
+#ui button{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:6px 8px;color:var(--fg);cursor:pointer;border-radius:6px}
 
-/* Modal */
-.modal{position:fixed;inset:0;display:grid;place-items:center;background:rgba(0,0,0,0.45);z-index:50}
-.modal.hidden{display:none}
-.modal-content{position:relative;width:min(520px,90vw);background:rgba(16,18,20,0.96);border-radius:14px;padding:18px;border:1px solid rgba(255,255,255,0.06)}
-.modal-content .close{position:absolute;right:8px;top:8px;border-radius:10px;background:transparent;border:1px solid rgba(255,255,255,0.06);padding:6px;cursor:pointer}
-.modal-content h2{margin:8px 0 6px;font-size:20px}
-.modal-content p{margin:0 0 8px;color:#cdd3d8}
-.modal-content .meta{display:flex;gap:10px;color:var(--muted)}
-.modal-content .actions{display:flex;justify-content:flex-end;margin-top:10px}.modal-content .actions .accent{padding:8px 12px;border-radius:10px;background:var(--accent-weak);border:1px solid var(--accent-strong);cursor:pointer}
+/* Title card (fixed top-right). GPU accelerated transforms */
+.card{
+  position:fixed;right:18px;top:80px;z-index:50;width:340px;max-width:calc(100vw - 40px);
+  background:var(--card-bg);padding:14px;border-radius:10px;border:1px solid rgba(255,255,255,0.06);
+  box-shadow:0 12px 36px rgba(0,0,0,0.6);transform-origin:100% 0;backface-visibility:hidden;
+  transition:opacity .18s ease, transform .22s cubic-bezier(.2,.9,.2,1);
+  opacity:0;transform:translateY(8px) scale(.98);
+}
+.card.show{opacity:1;transform:translateY(0) scale(1)}
+.card.hidden{display:none}
 
-/* admin */
-.admin-panel{position:fixed;right:12px;bottom:12px;width:min(720px,92vw);max-height:60vh;overflow:auto;background:rgba(16,16,18,0.92);border-radius:12px;padding:10px;z-index:48;border:1px solid rgba(255,255,255,0.06)}.admin-panel.hidden{display:none}
-.admin-head{display:flex;justify-content:space-between;align-items:center}.admin-head button{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:6px;border-radius:8px;color:var(--fg);cursor:pointer}
+/* header + body */
+.card .electro{font-size:16px;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
+.card #titleCardBody{font-size:13px;color:rgba(255,255,255,0.92);line-height:1.35;margin-bottom:12px}
 
-/* small holo animation util */
-.holo-fade-in{animation:holo .34s ease forwards}@keyframes holo{0%{opacity:0;transform:scale(.94)}100%{opacity:1;transform:scale(1)}}
+/* actions */
+#titleCardActions{display:flex;gap:8px;justify-content:flex-end}
+#titleCardActions button{padding:8px 10px;border-radius:6px;background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--fg);cursor:pointer}
+
+/* mobile */
+@media (max-width:720px){
+  #ui{left:8px;top:8px;padding:6px}
+  .card{width:300px;right:8px;top:64px}
+}
+
+/* all caps helper for labels rendered via CSS */
+.node-label{font-family:var(--font-main);font-size:11px;color:var(--fg);text-transform:uppercase;letter-spacing:0.6px}
