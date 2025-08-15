@@ -1,81 +1,162 @@
+/* Base layout */
 :root{
   --bg:#000;
-  --fg:#ddd;
-  --accent:#00c8ff;
-  --mono:1;
-  --ui-bg: rgba(0,0,0,0.36);
-  --tooltip-w:320px;
-  --font-main: 'Electrolize', Arial, sans-serif;
+  --fg:#e7e7e7;
+  --muted:#9aa3aa;
+  --accent:#8af3ff; /* overridden by picker */
+  --accent-weak: rgba(138,243,255,0.25);
+  --accent-strong: rgba(138,243,255,0.9);
 }
 
-/* base */
-*{box-sizing:border-box}
-html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-main);overflow:hidden}
-canvas{display:block;width:100vw;height:100vh}
-
-/* UI */
-#ui{
-  position:fixed;top:12px;left:12px;display:flex;gap:8px;z-index:80;align-items:center;
-  background:var(--ui-bg);padding:8px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);
-  font-family:var(--font-main);
+*{ box-sizing: border-box; }
+html,body{
+  margin:0;
+  height:100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Electrolize", system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", sans-serif;
+  user-select:none;
 }
-.ui-item{color:var(--fg);display:flex;align-items:center;gap:6px;font-size:13px}
-.ui-item input[type=color]{width:34px;height:24px;padding:0;border:0;background:transparent;cursor:pointer}
-.ui-item input[type=range]{width:110px}
-.ui-item button{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--fg);padding:6px 8px;border-radius:6px;cursor:pointer}
 
-/* tooltip (planet/tier only) - no hologram here */
-.tooltip{
-  position:fixed;pointer-events:none;z-index:90;display:flex;align-items:flex-start;width:var(--tooltip-w);transform:translate(12px,12px);
+#starChart{
+  display:block;
+  width:100vw;
+  height:100vh;
 }
-#tooltipContent{background:rgba(0,0,0,0.62);padding:10px;border-radius:8px;color:var(--fg);font-size:13px;line-height:1.2;border:1px solid rgba(255,255,255,0.06)}
 
-/* title card (node hover) - fixed top-right */
-.title-card{
-  position:fixed;right:18px;top:80px;pointer-events:auto;z-index:120;display:flex;flex-direction:column;align-items:flex-end;
-  transition:opacity .18s ease, transform .18s ease;opacity:0;transform:translateY(6px) scale(.98);
+/* Top UI bar */
+.ui-bar{
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  display:flex;
+  gap:10px;
+  align-items:center;
+  padding:10px 12px;
+  background: rgba(20,20,22,0.65);
+  backdrop-filter: blur(6px);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  z-index:20;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.35);
 }
-.title-card.show{opacity:1;transform:translateY(0) scale(1)}
-.title-card #titleCardInner{
-  background: linear-gradient(180deg, rgba(0,0,0,0.88), rgba(0,0,0,0.75));
-  border-radius:10px;padding:12px 14px;border:1px solid rgba(255,255,255,0.06);max-width:320px;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.6);
-  cursor:default;
+.ui-item{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-size:12px;
+  color: var(--muted);
 }
-.title-card .electro{font-family:var(--font-main);font-size:14px;color:var(--fg);margin-bottom:6px}
-.title-card #titleCardDesc{font-size:12px;color:rgba(255,255,255,0.9);line-height:1.2}
-
-/* expanded details panel */
-#expandedDetails.expanded{display:block;animation:expandIn .26s ease both}
-@keyframes expandIn{ from{ transform:translateY(-8px) scale(.98); opacity:0 } to { transform:translateY(0) scale(1); opacity:1 } }
-#expandedDetails{ margin-top:12px; background: linear-gradient(180deg, rgba(2,6,12,0.95), rgba(0,0,0,0.9)); border-radius:10px; border:1px solid rgba(255,255,255,0.06); box-shadow:0 30px 80px rgba(0,0,0,0.7); color:var(--fg); }
-
-/* popup */
-.popup{
-  position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:115;background:rgba(0,0,0,0.92);
-  padding:18px;border-radius:12px;color:var(--fg);border:1px solid rgba(255,255,255,0.06);max-width:520px;
+.ui-item.small{ font-size:11px; }
+.ui-bar input[type="color"],
+.ui-bar select,
+.ui-bar button{
+  background: rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.12);
+  color: var(--fg);
+  padding:6px 8px;
+  border-radius: 10px;
 }
-.popup button{padding:8px;border-radius:6px;background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--fg);cursor:pointer}
+.ui-bar button{
+  cursor:pointer;
+  transition: transform .15s ease, box-shadow .2s ease;
+}
+.ui-bar button:hover{ transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0,0,0,0.3); }
 
-/* admin */
+/* Hover card (tiny title card) */
+.hover-card{
+  position: fixed;
+  pointer-events: none;
+  padding:8px 10px;
+  background: rgba(15,15,18,0.85);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  color: var(--fg);
+  font-size: 12px;
+  line-height: 1.25;
+  opacity:0;
+  transform: translate(-50%, -140%) scale(.98);
+  transition: opacity .15s ease, transform .2s ease;
+  z-index: 25;
+  max-width: 240px;
+  text-align:center;
+}
+.hover-card.show{
+  opacity:1;
+  transform: translate(-50%, -140%) scale(1);
+}
+
+/* Details modal */
+.modal{
+  position: fixed;
+  inset:0;
+  display:grid;
+  place-items:center;
+  background: rgba(0,0,0,0.45);
+  z-index: 30;
+  opacity:1;
+}
+.modal.hidden{ display:none; }
+.modal-content{
+  position: relative;
+  width:min(520px, 90vw);
+  background: rgba(15,18,20,0.95);
+  border:1px solid rgba(255,255,255,0.12);
+  border-radius: 16px;
+  padding: 20px 18px;
+  box-shadow: 0 12px 48px rgba(0,0,0,0.55);
+  animation: pop .18s ease;
+}
+@keyframes pop{
+  from{ transform: scale(.96); opacity:0; }
+  to{ transform: scale(1); opacity:1; }
+}
+.modal-content .close{
+  position:absolute;
+  top:8px; right:8px;
+  width:32px; height:32px;
+  border-radius:10px;
+  border:1px solid rgba(255,255,255,0.12);
+  background: transparent;
+  color: var(--fg);
+  font-size:18px;
+  cursor:pointer;
+}
+.modal-content h2{ margin: 8px 0 6px; font-size: 20px; color: var(--fg); }
+.modal-content p{ margin:0 0 8px; color: #cdd3d8; }
+.modal-content .meta{ display:flex; gap:10px; font-size:12px; color: var(--muted); }
+.modal-content .actions{ margin-top: 12px; display:flex; justify-content:flex-end; }
+.modal-content .actions .accent{
+  padding:8px 12px; border-radius: 10px;
+  background: var(--accent-weak);
+  border:1px solid var(--accent-strong);
+  color: var(--fg); cursor:pointer;
+}
+
+/* Admin panel */
 .admin-panel{
-  position:fixed;right:12px;bottom:12px;z-index:116;background:rgba(0,0,0,0.9);padding:12px;border-radius:8px;
-  color:var(--fg);width:420px;max-height:60vh;overflow:auto;border:1px solid rgba(255,255,255,0.06)
+  position: fixed;
+  right: 10px; bottom: 10px;
+  width:min(700px, 92vw);
+  max-height: 60vh;
+  overflow:auto;
+  background: rgba(16,16,18,0.92);
+  border:1px solid rgba(255,255,255,0.12);
+  border-radius: 14px;
+  padding: 10px;
+  z-index: 28;
 }
-.admin-panel input[type=password]{width:100%;padding:8px;margin-bottom:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:var(--fg)}
-.admin-panel button{margin-top:8px;padding:8px;border-radius:6px;background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--fg);cursor:pointer}
-
-/* responsive */
-@media (max-width:720px){
-  .tooltip{display:none}
-  .title-card{display:none} /* use popup on mobile */
-  .popup{left:50%;top:auto;bottom:8px;transform:translateX(-50%);width:92%}
+.admin-panel.hidden{ display:none; }
+.admin-head{ display:flex; justify-content:space-between; align-items:center; }
+.admin-head button{ background:transparent; color:var(--fg); border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:4px 8px; cursor:pointer; }
+.admin-content input, .admin-content select{
+  width:100%; background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12);
+  color: var(--fg); padding:6px 8px; border-radius: 8px; margin:4px 0;
 }
 
-/* helper */
-.grayscale{filter:grayscale(100%)}
-
-/* loading */
-body.loading::after{
-  content:'Loading...';position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:200;color:var(--fg);opacity:0.6;font-size:12px;
+/* Hologram fade */
+.holo-fade-in{ animation: holo .35s ease forwards; }
+@keyframes holo{
+  0%{ opacity:0; transform: scale(0.9); filter: drop-shadow(0 0 0 rgba(138,243,255,0)); }
+  100%{ opacity:1; transform: scale(1); filter: drop-shadow(0 0 10px var(--accent-weak)); }
 }
