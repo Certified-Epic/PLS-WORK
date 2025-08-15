@@ -294,14 +294,14 @@ function draw(){
     ctx.save(); ctx.globalAlpha = 0.9; ctx.drawImage(images.center, -cs/2, -cs/2, cs, cs); ctx.restore();
   }
 
-  /* PLANETS */
-  const total = achievements.planets.length || 5;
-  const coreRadius = getCoreRadius();
-  for(let i=0;i<total;i++){
-    const planet = achievements.planets[i];
-    const pos = planetPosition(i, total, coreRadius);
-    const px = pos.x, py = pos.y;
-    planet._world = { x:px, y:py, angle: pos.angle };
+const total = achievements.planets.length || 5;
+const coreRadius = getCoreRadius();
+for(let i=0;i<total;i++){
+  const planet = achievements.planets[i];
+  const pos = planetPosition(i, total, coreRadius);
+  const px = pos.x, py = pos.y;
+  planet._world = { x:px, y:py, angle: pos.angle };
+
 
     // hover progress for core
     planet._hover = planet._hover===undefined?0:planet._hover;
