@@ -10,30 +10,32 @@
   <canvas id="starChart"></canvas>
 
   <div id="ui">
-    <label class="ui-item">Accent A:
-      <input id="accentA" type="color" value="#00c8ff">
+    <label class="ui-item">Accent:
+      <input id="themeColor" type="color" value="#00c8ff" title="Pick theme color">
     </label>
-    <label class="ui-item">Accent B:
-      <input id="accentB" type="color" value="#8a00ff">
+    <label class="ui-item">Gradient:
+      <input id="gradToggle" type="checkbox" checked title="Enable gradient pulses">
     </label>
-    <div id="gradientPreview" class="ui-item" title="Theme gradient preview"></div>
     <label class="ui-item">Monochrome:
       <input id="monoToggle" type="checkbox" checked>
     </label>
     <label class="ui-item">Transition:
-      <input id="transRange" type="range" min="0.02" max="0.3" step="0.01" value="0.12">
+      <input id="transRange" type="range" min="0.02" max="0.28" step="0.01" value="0.12">
     </label>
     <button id="homeBtn" class="ui-item">Reset View</button>
     <button id="adminButton" class="ui-item" onclick="showAdminPanel()">Admin</button>
   </div>
 
+  <!-- tooltip for desktop -->
   <div id="tooltip" class="tooltip" style="display:none;">
     <img id="tooltipHolo" src="assets/achievementnodehologram.png" alt="" draggable="false">
     <div id="tooltipContent"></div>
   </div>
 
+  <!-- popup for achievement details (fallback for mobile / clicks) -->
   <div id="popup" class="popup" style="display:none;"></div>
 
+  <!-- admin -->
   <div id="adminPanel" class="admin-panel" style="display:none;">
     <div class="admin-login" id="adminLogin">
       <input type="password" id="adminPassword" placeholder="Enter password">
