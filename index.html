@@ -3,38 +3,55 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Star Chart — Three.js Version</title>
+  <title>Star Chart — Step-by-step</title>
 
-  <!-- Three.js from CDN -->
-  <script src="https://unpkg.com/three@0.154.0/build/three.min.js"></script>
-  <script src="https://unpkg.com/three@0.154.0/examples/js/controls/OrbitControls.js"></script>
-
-  <!-- Electrolize -->
+  <!-- Electrolize font -->
   <link href="https://fonts.googleapis.com/css2?family=Electrolize&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id="app">
-    <canvas id="threeCanvas"></canvas>
-
-    <!-- UI overlay -->
-    <div id="ui">
-      <label>Accent <input id="themeColor" type="color" value="#00c8ff"></label>
+  <!-- Top navbar for global settings (Step 1) -->
+  <header id="topbar">
+    <div class="brand">STAR CHART</div>
+    <nav class="controls">
+      <label>Theme <input id="themeColor" type="color" value="#00c8ff"></label>
       <label>Monochrome <input id="monoToggle" type="checkbox" checked></label>
-      <button id="resetBtn">Reset View</button>
-    </div>
+      <label>Debug <input id="debugToggle" type="checkbox"></label>
+      <button id="resetView">Reset View</button>
+    </nav>
+  </header>
 
-    <!-- Title card (fixed top-right). Single card only -->
-    <div id="titleCard" class="card hidden" aria-hidden="true">
-      <div id="titleCardHeader" class="electro"></div>
-      <div id="titleCardBody"></div>
-      <div id="titleCardActions">
-        <button id="expandBtn">Details</button>
-        <button id="closeCardBtn">Close</button>
+  <!-- Canvas (Step 2, 3, 4, 6) -->
+  <canvas id="starChart" aria-label="Star chart"></canvas>
+
+  <!-- Tooltip / Title card (single) (Step 7) -->
+  <div id="titleCard" class="ui-card" aria-hidden="true">
+    <div class="ui-card-inner">
+      <div id="titleCardTitle" class="ui-title"></div>
+      <div id="titleCardSubtitle" class="ui-sub"></div>
+    </div>
+  </div>
+
+  <!-- Expanded details overlay (single visible at a time) -->
+  <div id="detailPanel" class="detail-panel" aria-hidden="true">
+    <div class="detail-inner">
+      <button id="detailClose" class="close">✕</button>
+      <h2 id="detailTitle"></h2>
+      <p id="detailDesc"></p>
+      <div class="detail-actions">
+        <button id="completeBtn">Mark Complete</button>
       </div>
     </div>
   </div>
 
-  <script src="script.js" type="module"></script>
+  <!-- Admin minimal (kept from before) -->
+  <div id="adminPanel" class="admin-panel" style="display:none;">
+    <input id="adminPassword" placeholder="admin password" type="password">
+    <button onclick="loginAdmin()">Login</button>
+    <div id="editContent"></div>
+  </div>
+
+  <script src="script.js"></script>
 </body>
 </html>
