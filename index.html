@@ -3,55 +3,38 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Star Chart — Fit + Cursor Zoom</title>
+  <title>Star Chart — Three.js Version</title>
+
+  <!-- Three.js from CDN -->
+  <script src="https://unpkg.com/three@0.154.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.154.0/examples/js/controls/OrbitControls.js"></script>
 
   <!-- Electrolize -->
   <link href="https://fonts.googleapis.com/css2?family=Electrolize&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <canvas id="starChart"></canvas>
+  <div id="app">
+    <canvas id="threeCanvas"></canvas>
 
-  <div class="ui-bar">
-    <label class="ui-item">Color
-      <input id="themeColor" type="color" value="#8af3ff">
-    </label>
-    <label class="ui-item">Gradient
-      <select id="themeGradient">
-        <option value="none">None</option>
-        <option value="radial">Radial</option>
-        <option value="linear">Linear</option>
-        <option value="pulse">Pulse</option>
-      </select>
-    </label>
-    <button id="resetView" class="ui-item">Reset View</button>
-    <button id="adminButton" class="ui-item small">Admin</button>
-  </div>
+    <!-- UI overlay -->
+    <div id="ui">
+      <label>Accent <input id="themeColor" type="color" value="#00c8ff"></label>
+      <label>Monochrome <input id="monoToggle" type="checkbox" checked></label>
+      <button id="resetBtn">Reset View</button>
+    </div>
 
-  <div id="hoverCard" class="hover-card"></div>
-
-  <div id="detailModal" class="modal hidden">
-    <div class="modal-content">
-      <button id="closeDetail" class="close">×</button>
-      <h2 id="detailTitle"></h2>
-      <p id="detailDesc"></p>
-      <div class="meta"><span id="detailStatus"></span><span id="detailDate"></span></div>
-      <div class="actions"><button id="completeBtn" class="accent">Mark Complete</button></div>
+    <!-- Title card (fixed top-right). Single card only -->
+    <div id="titleCard" class="card hidden" aria-hidden="true">
+      <div id="titleCardHeader" class="electro"></div>
+      <div id="titleCardBody"></div>
+      <div id="titleCardActions">
+        <button id="expandBtn">Details</button>
+        <button id="closeCardBtn">Close</button>
+      </div>
     </div>
   </div>
 
-  <div id="adminPanel" class="admin-panel hidden">
-    <div class="admin-head">
-      <strong>Admin</strong>
-      <button id="closeAdmin">×</button>
-    </div>
-    <div id="adminLogin" class="admin-login">
-      <input id="adminPassword" type="password" placeholder="Password" />
-      <button id="loginAdmin">Login</button>
-    </div>
-    <div id="editContent" class="admin-content hidden"></div>
-  </div>
-
-  <script src="script.js"></script>
+  <script src="script.js" type="module"></script>
 </body>
 </html>
