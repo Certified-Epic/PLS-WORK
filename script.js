@@ -1,4 +1,4 @@
-v/* script.js — zoom atmosphere, node fade-in, hologram on node hover,
+/* script.js — zoom atmosphere, node fade-in, hologram on node hover,
    junctions shown only when hovering core, fixed title card UI
 */
 
