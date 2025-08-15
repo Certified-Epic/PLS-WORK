@@ -1,72 +1,67 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Star Chart — Detailed Closeups</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Star Chart</title>
 
   <!-- Electrolize font -->
   <link href="https://fonts.googleapis.com/css2?family=Electrolize&display=swap" rel="stylesheet">
+
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <canvas id="starChart"></canvas>
 
-  <div id="ui">
-    <label class="ui-item">Accent:
-      <input id="themeColor" type="color" value="#00c8ff" title="Pick theme color">
+  <!-- Theme controls -->
+  <div class="ui-bar">
+    <label class="ui-item">
+      Theme
+      <input id="themeColor" type="color" value="#8af3ff" />
     </label>
-    <label class="ui-item">Gradient:
-      <input id="gradToggle" type="checkbox" checked>
+    <label class="ui-item">
+      Gradient
+      <select id="themeGradient">
+        <option value="none" selected>None</option>
+        <option value="radial">Radial</option>
+        <option value="linear">Linear</option>
+        <option value="pulse">Pulse</option>
+      </select>
     </label>
-    <label class="ui-item">Monochrome:
-      <input id="monoToggle" type="checkbox" checked>
-    </label>
-    <label class="ui-item">Transition:
-      <input id="transRange" type="range" min="0.02" max="0.28" step="0.01" value="0.12">
-    </label>
-    <button id="homeBtn" class="ui-item">Reset View</button>
-    <button id="adminButton" class="ui-item" onclick="showAdminPanel()">Admin</button>
+    <button id="resetView" class="ui-item">Reset View</button>
+    <button id="adminButton" class="ui-item small">Admin</button>
   </div>
 
-  <!-- Tooltip for planets/tiers/junction (no hologram image here) -->
-  <div id="tooltip" class="tooltip" style="display:none;">
-    <div id="tooltipContent"></div>
-  </div>
+  <!-- Hover title card (shown on top) -->
+  <div id="hoverCard" class="hover-card"></div>
 
-  <!-- Title card (fixed, top-right). Node hover shows the details here (no hologram in the card) -->
-  <div id="titleCard" class="title-card" style="display:none;">
-    <div id="titleCardInner" tabindex="0">
-      <div id="titleCardTitle" class="electro"></div>
-      <div id="titleCardDesc"></div>
-      <div id="titleCardControls" style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end">
-        <button id="expandDetailsBtn">Open Details</button>
+  <!-- Details modal -->
+  <div id="detailModal" class="modal hidden">
+    <div class="modal-content">
+      <button class="close" id="closeDetail">×</button>
+      <h2 id="detailTitle"></h2>
+      <p id="detailDesc"></p>
+      <div class="meta">
+        <span id="detailStatus"></span>
+        <span id="detailDate"></span>
       </div>
-    </div>
-
-    <!-- expanded panel (animated) -->
-    <div id="expandedDetails" class="expanded" style="display:none;">
-      <div id="expandedInner" style="padding:12px;max-width:360px;">
-        <h3 id="expTitle" style="margin:0 0 6px 0"></h3>
-        <div id="expDesc" style="opacity:0.9"></div>
-        <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end">
-          <button onclick="closeExpanded()">Close</button>
-        </div>
+      <div class="actions">
+        <button id="completeBtn" class="accent">Mark Complete</button>
       </div>
     </div>
   </div>
 
-  <!-- Popup for fallback -->
-  <div id="popup" class="popup" style="display:none;"></div>
-
-  <!-- Admin -->
-  <div id="adminPanel" class="admin-panel" style="display:none;">
+  <!-- Admin panel -->
+  <div id="adminPanel" class="admin-panel hidden">
+    <div class="admin-head">
+      <strong>Admin</strong>
+      <button id="closeAdmin">×</button>
+    </div>
     <div class="admin-login" id="adminLogin">
-      <input type="password" id="adminPassword" placeholder="Enter password">
-      <button onclick="loginAdmin()">Login</button>
+      <input type="password" id="adminPassword" placeholder="Password" />
+      <button id="loginAdmin">Login</button>
     </div>
-    <div id="editContent" style="display:none;"></div>
-    <button onclick="hideAdminPanel()">Close</button>
+    <div id="editContent" class="admin-content hidden"></div>
   </div>
 
   <script src="script.js"></script>
