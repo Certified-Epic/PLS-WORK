@@ -22,7 +22,7 @@ canvas{display:block;width:100vw;height:100vh}
 .controls{display:flex;gap:10px;align-items:center}
 .controls label{font-size:13px;display:flex;gap:6px;align-items:center}
 
-/* title card (anchored to node) - will be positioned via transform */
+/* title card (anchored to node) */
 .ui-card{
   position:fixed; left:0; top:0; z-index:220; pointer-events:none;
   transform-origin:left top; opacity:0; transform: translate(-50%, -120%) scale(.98);
@@ -51,7 +51,7 @@ canvas{display:block;width:100vw;height:100vh}
 /* admin panel */
 .admin-panel{position:fixed;left:18px;bottom:18px;background:rgba(0,0,0,0.85);padding:10px;border-radius:8px;color:var(--fg);z-index:240;border:1px solid rgba(255,255,255,0.04)}
 
-/* responsiveness */
+/* small screens */
 @media (max-width:720px){
   .controls{display:none}
   .ui-card{display:none}
