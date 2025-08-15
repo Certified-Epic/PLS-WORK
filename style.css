@@ -1,162 +1,44 @@
-/* Base layout */
-:root{
-  --bg:#000;
-  --fg:#e7e7e7;
-  --muted:#9aa3aa;
-  --accent:#8af3ff; /* overridden by picker */
-  --accent-weak: rgba(138,243,255,0.25);
-  --accent-strong: rgba(138,243,255,0.9);
+body {
+  margin: 0;
+  overflow: hidden;
+  background: black;
 }
 
-*{ box-sizing: border-box; }
-html,body{
-  margin:0;
-  height:100%;
-  background: var(--bg);
-  color: var(--fg);
-  font-family: "Electrolize", system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", sans-serif;
-  user-select:none;
+canvas {
+  display: block;
 }
 
-#starChart{
-  display:block;
-  width:100vw;
-  height:100vh;
+.popup {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0,0,0,0.8);
+  color: white;
+  padding: 20px;
+  border: 1px solid white;
+  z-index: 10;
+  max-width: 400px;
+  text-align: center;
 }
 
-/* Top UI bar */
-.ui-bar{
-  position: fixed;
+.admin-panel {
+  position: absolute;
+  top: 10%;
+  left: 10%;
+  background: rgba(0,0,0,0.8);
+  color: white;
+  padding: 20px;
+  border: 1px solid white;
+  z-index: 10;
+  max-height: 80vh;
+  overflow: auto;
+  width: 80%;
+}
+
+#adminButton {
+  position: absolute;
   top: 10px;
-  left: 10px;
-  display:flex;
-  gap:10px;
-  align-items:center;
-  padding:10px 12px;
-  background: rgba(20,20,22,0.65);
-  backdrop-filter: blur(6px);
-  border:1px solid rgba(255,255,255,0.08);
-  border-radius: 14px;
-  z-index:20;
-  box-shadow: 0 8px 30px rgba(0,0,0,0.35);
-}
-.ui-item{
-  display:flex;
-  align-items:center;
-  gap:6px;
-  font-size:12px;
-  color: var(--muted);
-}
-.ui-item.small{ font-size:11px; }
-.ui-bar input[type="color"],
-.ui-bar select,
-.ui-bar button{
-  background: rgba(255,255,255,0.04);
-  border:1px solid rgba(255,255,255,0.12);
-  color: var(--fg);
-  padding:6px 8px;
-  border-radius: 10px;
-}
-.ui-bar button{
-  cursor:pointer;
-  transition: transform .15s ease, box-shadow .2s ease;
-}
-.ui-bar button:hover{ transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0,0,0,0.3); }
-
-/* Hover card (tiny title card) */
-.hover-card{
-  position: fixed;
-  pointer-events: none;
-  padding:8px 10px;
-  background: rgba(15,15,18,0.85);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 10px;
-  color: var(--fg);
-  font-size: 12px;
-  line-height: 1.25;
-  opacity:0;
-  transform: translate(-50%, -140%) scale(.98);
-  transition: opacity .15s ease, transform .2s ease;
-  z-index: 25;
-  max-width: 240px;
-  text-align:center;
-}
-.hover-card.show{
-  opacity:1;
-  transform: translate(-50%, -140%) scale(1);
-}
-
-/* Details modal */
-.modal{
-  position: fixed;
-  inset:0;
-  display:grid;
-  place-items:center;
-  background: rgba(0,0,0,0.45);
-  z-index: 30;
-  opacity:1;
-}
-.modal.hidden{ display:none; }
-.modal-content{
-  position: relative;
-  width:min(520px, 90vw);
-  background: rgba(15,18,20,0.95);
-  border:1px solid rgba(255,255,255,0.12);
-  border-radius: 16px;
-  padding: 20px 18px;
-  box-shadow: 0 12px 48px rgba(0,0,0,0.55);
-  animation: pop .18s ease;
-}
-@keyframes pop{
-  from{ transform: scale(.96); opacity:0; }
-  to{ transform: scale(1); opacity:1; }
-}
-.modal-content .close{
-  position:absolute;
-  top:8px; right:8px;
-  width:32px; height:32px;
-  border-radius:10px;
-  border:1px solid rgba(255,255,255,0.12);
-  background: transparent;
-  color: var(--fg);
-  font-size:18px;
-  cursor:pointer;
-}
-.modal-content h2{ margin: 8px 0 6px; font-size: 20px; color: var(--fg); }
-.modal-content p{ margin:0 0 8px; color: #cdd3d8; }
-.modal-content .meta{ display:flex; gap:10px; font-size:12px; color: var(--muted); }
-.modal-content .actions{ margin-top: 12px; display:flex; justify-content:flex-end; }
-.modal-content .actions .accent{
-  padding:8px 12px; border-radius: 10px;
-  background: var(--accent-weak);
-  border:1px solid var(--accent-strong);
-  color: var(--fg); cursor:pointer;
-}
-
-/* Admin panel */
-.admin-panel{
-  position: fixed;
-  right: 10px; bottom: 10px;
-  width:min(700px, 92vw);
-  max-height: 60vh;
-  overflow:auto;
-  background: rgba(16,16,18,0.92);
-  border:1px solid rgba(255,255,255,0.12);
-  border-radius: 14px;
-  padding: 10px;
-  z-index: 28;
-}
-.admin-panel.hidden{ display:none; }
-.admin-head{ display:flex; justify-content:space-between; align-items:center; }
-.admin-head button{ background:transparent; color:var(--fg); border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:4px 8px; cursor:pointer; }
-.admin-content input, .admin-content select{
-  width:100%; background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12);
-  color: var(--fg); padding:6px 8px; border-radius: 8px; margin:4px 0;
-}
-
-/* Hologram fade */
-.holo-fade-in{ animation: holo .35s ease forwards; }
-@keyframes holo{
-  0%{ opacity:0; transform: scale(0.9); filter: drop-shadow(0 0 0 rgba(138,243,255,0)); }
-  100%{ opacity:1; transform: scale(1); filter: drop-shadow(0 0 10px var(--accent-weak)); }
+  right: 10px;
+  z-index: 10;
 }
