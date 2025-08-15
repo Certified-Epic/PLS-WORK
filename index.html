@@ -10,9 +10,13 @@
   <canvas id="starChart"></canvas>
 
   <div id="ui">
-    <label class="ui-item">Theme:
-      <input id="themeColor" type="color" value="#00c8ff" title="Pick theme color">
+    <label class="ui-item">Accent A:
+      <input id="accentA" type="color" value="#00c8ff">
     </label>
+    <label class="ui-item">Accent B:
+      <input id="accentB" type="color" value="#8a00ff">
+    </label>
+    <div id="gradientPreview" class="ui-item" title="Theme gradient preview"></div>
     <label class="ui-item">Monochrome:
       <input id="monoToggle" type="checkbox" checked>
     </label>
@@ -23,16 +27,13 @@
     <button id="adminButton" class="ui-item" onclick="showAdminPanel()">Admin</button>
   </div>
 
-  <!-- Tooltip with hologram background (hidden on small screens) -->
   <div id="tooltip" class="tooltip" style="display:none;">
     <img id="tooltipHolo" src="assets/achievementnodehologram.png" alt="" draggable="false">
     <div id="tooltipContent"></div>
   </div>
 
-  <!-- Popup for achievements -->
   <div id="popup" class="popup" style="display:none;"></div>
 
-  <!-- Admin panel -->
   <div id="adminPanel" class="admin-panel" style="display:none;">
     <div class="admin-login" id="adminLogin">
       <input type="password" id="adminPassword" placeholder="Enter password">
