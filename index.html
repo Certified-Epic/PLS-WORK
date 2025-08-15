@@ -9,19 +9,21 @@
 <body>
   <canvas id="starChart"></canvas>
 
-  <!-- Small UI controls -->
   <div id="ui">
     <label class="ui-item">Theme:
       <input id="themeColor" type="color" value="#00c8ff" title="Pick theme color">
     </label>
-    <label class="ui-item mono-toggle">Monochrome:
+    <label class="ui-item">Monochrome:
       <input id="monoToggle" type="checkbox" checked>
+    </label>
+    <label class="ui-item">Transition:
+      <input id="transRange" type="range" min="0.02" max="0.3" step="0.01" value="0.12">
     </label>
     <button id="homeBtn" class="ui-item">Reset View</button>
     <button id="adminButton" class="ui-item" onclick="showAdminPanel()">Admin</button>
   </div>
 
-  <!-- Tooltip with hologram background -->
+  <!-- Tooltip with hologram background (hidden on small screens) -->
   <div id="tooltip" class="tooltip" style="display:none;">
     <img id="tooltipHolo" src="assets/achievementnodehologram.png" alt="" draggable="false">
     <div id="tooltipContent"></div>
