@@ -3,29 +3,27 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Star Chart — Step-by-step</title>
+  <title>Star Chart — Fixed Layout</title>
 
   <!-- Electrolize font -->
   <link href="https://fonts.googleapis.com/css2?family=Electrolize&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- Top navbar for global settings (Step 1) -->
   <header id="topbar">
     <div class="brand">STAR CHART</div>
     <nav class="controls">
       <label>Theme <input id="themeColor" type="color" value="#00c8ff"></label>
-      <label>Monochrome <input id="monoToggle" type="checkbox" checked></label>
+      <label>Mono <input id="monoToggle" type="checkbox"></label>
       <label>Debug <input id="debugToggle" type="checkbox"></label>
-      <button id="resetView">Reset View</button>
+      <button id="resetView">Reset</button>
     </nav>
   </header>
 
-  <!-- Canvas (Step 2, 3, 4, 6) -->
   <canvas id="starChart" aria-label="Star chart"></canvas>
 
-  <!-- Tooltip / Title card (single) (Step 7) -->
+  <!-- Title card: anchored to hovered node (placed on top of hologram) -->
   <div id="titleCard" class="ui-card" aria-hidden="true">
     <div class="ui-card-inner">
       <div id="titleCardTitle" class="ui-title"></div>
@@ -33,7 +31,7 @@
     </div>
   </div>
 
-  <!-- Expanded details overlay (single visible at a time) -->
+  <!-- Detail panel (single) -->
   <div id="detailPanel" class="detail-panel" aria-hidden="true">
     <div class="detail-inner">
       <button id="detailClose" class="close">✕</button>
@@ -45,7 +43,6 @@
     </div>
   </div>
 
-  <!-- Admin minimal (kept from before) -->
   <div id="adminPanel" class="admin-panel" style="display:none;">
     <input id="adminPassword" placeholder="admin password" type="password">
     <button onclick="loginAdmin()">Login</button>
