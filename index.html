@@ -1,30 +1,74 @@
-<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Star Chart</title>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Star Chart — Detailed Closeups</title>
+
+  <!-- Electrolize font -->
   <link href="https://fonts.googleapis.com/css2?family=Electrolize&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <canvas id="starChart"></canvas>
+
   <div id="ui">
-    <div class="ui-item">Accent: <input id="themeColor" type="color" value="#00c8ff"></div>
-    <div class="ui-item">Gradient: <input id="gradToggle" type="checkbox" checked></div>
-    <div class="ui-item">Monochrome: <input id="monoToggle" type="checkbox"></div>
-    <div class="ui-item">Transition: <input id="transRange" type="range" min="0.05" max="0.4" step="0.01" value="0.12"></div>
-    <button id="homeBtn">Reset View</button>
-    <button onclick="showAdmin()">Admin</button>
+    <label class="ui-item">Accent:
+      <input id="themeColor" type="color" value="#00c8ff" title="Pick theme color">
+    </label>
+    <label class="ui-item">Gradient:
+      <input id="gradToggle" type="checkbox" checked>
+    </label>
+    <label class="ui-item">Monochrome:
+      <input id="monoToggle" type="checkbox" checked>
+    </label>
+    <label class="ui-item">Transition:
+      <input id="transRange" type="range" min="0.02" max="0.28" step="0.01" value="0.12">
+    </label>
+    <button id="homeBtn" class="ui-item">Reset View</button>
+    <button id="adminButton" class="ui-item" onclick="showAdminPanel()">Admin</button>
   </div>
-  <div id="tooltip" class="tooltip"><div id="tooltipContent"></div></div>
-  <div id="titleCard" class="title-card"><div id="titleCardInner"><div id="titleCardTitle" class="electro"></div><div id="titleCardDesc"></div></div></div>
-  <div id="popup" class="popup"></div>
-  <div id="adminPanel" class="admin-panel" style="display:none">
-    <div id="adminLogin"><input type="password" id="adminPass" placeholder="Password"><button onclick="loginAdmin()">Login</button></div>
-    <div id="editContent" style="display:none"></div>
+
+  <!-- Tooltip for planets/tiers/junction (no hologram image here) -->
+  <div id="tooltip" class="tooltip" style="display:none;">
+    <div id="tooltipContent"></div>
   </div>
+
+  <!-- Title card (fixed, top-right). Node hover shows the details here (no hologram in the card) -->
+  <div id="titleCard" class="title-card" style="display:none;">
+    <div id="titleCardInner" tabindex="0">
+      <div id="titleCardTitle" class="electro"></div>
+      <div id="titleCardDesc"></div>
+      <div id="titleCardControls" style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end">
+        <button id="expandDetailsBtn">Open Details</button>
+      </div>
+    </div>
+
+    <!-- expanded panel (animated) -->
+    <div id="expandedDetails" class="expanded" style="display:none;">
+      <div id="expandedInner" style="padding:12px;max-width:360px;">
+        <h3 id="expTitle" style="margin:0 0 6px 0"></h3>
+        <div id="expDesc" style="opacity:0.9"></div>
+        <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end">
+          <button onclick="closeExpanded()">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Popup for fallback -->
+  <div id="popup" class="popup" style="display:none;"></div>
+
+  <!-- Admin -->
+  <div id="adminPanel" class="admin-panel" style="display:none;">
+    <div class="admin-login" id="adminLogin">
+      <input type="password" id="adminPassword" placeholder="Enter password">
+      <button onclick="loginAdmin()">Login</button>
+    </div>
+    <div id="editContent" style="display:none;"></div>
+    <button onclick="hideAdminPanel()">Close</button>
+  </div>
+
   <script src="script.js"></script>
 </body>
 </html>
