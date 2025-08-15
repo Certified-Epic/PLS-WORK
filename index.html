@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Warframe-Style Star Chart</title>
+  <title>Star Chart — Detailed Closeups</title>
 
   <!-- Electrolize font -->
   <link href="https://fonts.googleapis.com/css2?family=Electrolize&display=swap" rel="stylesheet">
@@ -30,13 +30,12 @@
     <button id="adminButton" class="ui-item" onclick="showAdminPanel()">Admin</button>
   </div>
 
-  <!-- Tooltip (planet/tier only) -->
+  <!-- Tooltip for planets/tiers (no hologram image here) -->
   <div id="tooltip" class="tooltip" style="display:none;">
-    <img id="tooltipHolo" src="assets/achievementnodehologram.png" alt="" draggable="false">
     <div id="tooltipContent"></div>
   </div>
 
-  <!-- Title card (node-only). Fade in/out via CSS. Single source of truth to avoid duplicate details. -->
+  <!-- Title card (fixed, top-right). Node hover shows the details here (no duplicate) -->
   <div id="titleCard" class="title-card" style="display:none;">
     <div id="titleCardInner">
       <div id="titleCardTitle" class="electro"></div>
@@ -44,7 +43,7 @@
     </div>
   </div>
 
-  <!-- Popup for fallback (mobile or explicit clicks) -->
+  <!-- Popup for fallback -->
   <div id="popup" class="popup" style="display:none;"></div>
 
   <!-- Admin -->
