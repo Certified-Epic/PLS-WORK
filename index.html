@@ -4,6 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Warframe-Style Star Chart</title>
+
+  <!-- Electrolize font -->
+  <link href="https://fonts.googleapis.com/css2?family=Electrolize&display=swap" rel="stylesheet">
+
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -14,7 +18,7 @@
       <input id="themeColor" type="color" value="#00c8ff" title="Pick theme color">
     </label>
     <label class="ui-item">Gradient:
-      <input id="gradToggle" type="checkbox" checked title="Enable gradient pulses">
+      <input id="gradToggle" type="checkbox" checked>
     </label>
     <label class="ui-item">Monochrome:
       <input id="monoToggle" type="checkbox" checked>
@@ -26,16 +30,24 @@
     <button id="adminButton" class="ui-item" onclick="showAdminPanel()">Admin</button>
   </div>
 
-  <!-- tooltip for desktop -->
+  <!-- Tooltip (planet/tier only) -->
   <div id="tooltip" class="tooltip" style="display:none;">
     <img id="tooltipHolo" src="assets/achievementnodehologram.png" alt="" draggable="false">
     <div id="tooltipContent"></div>
   </div>
 
-  <!-- popup for achievement details (fallback for mobile / clicks) -->
+  <!-- Title card (node-only). Fade in/out via CSS. Single source of truth to avoid duplicate details. -->
+  <div id="titleCard" class="title-card" style="display:none;">
+    <div id="titleCardInner">
+      <div id="titleCardTitle" class="electro"></div>
+      <div id="titleCardDesc"></div>
+    </div>
+  </div>
+
+  <!-- Popup for fallback (mobile or explicit clicks) -->
   <div id="popup" class="popup" style="display:none;"></div>
 
-  <!-- admin -->
+  <!-- Admin -->
   <div id="adminPanel" class="admin-panel" style="display:none;">
     <div class="admin-login" id="adminLogin">
       <input type="password" id="adminPassword" placeholder="Enter password">
