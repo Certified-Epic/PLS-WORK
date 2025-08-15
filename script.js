@@ -613,7 +613,7 @@ function drawLoop(ts){
       // compute node alpha based on camera.scale (nodes fade in as you approach) Step 4
       const vis = clamp((camera.scale - CONFIG.nodeShowStart) / (CONFIG.nodeShowEnd - CONFIG.nodeShowStart), 0, 1);
       // compact nodes: placed on circumference around tier center (so they "lay on the planet")
-      const compactR = Math.max( (TIER_VISUAL_SIZE := 60), 18 );
+      const compactR = Math.max( (TIER_VISUAL_SIZE = 60), 18 );
       // but if focused on this tier, we expand them out into rings — compute expanded positions
       let expanded = (focused.planet === p.index && focused.tier === t.index);
       let idx = 0;
