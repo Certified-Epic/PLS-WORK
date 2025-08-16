@@ -3,11 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Star Chart — Planet Surface Nodes</title>
-
-  <!-- Electrolize font -->
+  <title>Star Chart — Glowing Paths</title>
   <link href="https://fonts.googleapis.com/css2?family=Electrolize&display=swap" rel="stylesheet">
-
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -23,11 +20,12 @@
 
   <canvas id="starChart" aria-label="Star chart"></canvas>
 
-  <!-- Title card anchored to node (above hologram) -->
-  <div id="titleCard" class="ui-card" aria-hidden="true">
-    <div class="ui-card-inner">
-      <div id="titleCardTitle" class="ui-title"></div>
-      <div id="titleCardSubtitle" class="ui-sub"></div>
+  <!-- Minecraft-style title card (icon placeholder left) -->
+  <div id="titleCard" class="title-card" aria-hidden="true">
+    <div class="card-icon" id="cardIcon"></div>
+    <div class="card-text">
+      <div id="titleCardTitle" class="card-title"></div>
+      <div id="titleCardSubtitle" class="card-sub"></div>
     </div>
   </div>
 
@@ -43,6 +41,7 @@
     </div>
   </div>
 
+  <!-- admin -->
   <div id="adminPanel" class="admin-panel" style="display:none;">
     <input id="adminPassword" placeholder="admin password" type="password">
     <button onclick="loginAdmin()">Login</button>
