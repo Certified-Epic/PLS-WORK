@@ -297,7 +297,7 @@ function updateHover(screenX, screenY) {
   // update UI
   if (hovered) {
     if (hovered.type === 'achievement') {
-      const node = layout.planets[hovered.planet].t iers[hovered.tier].achievements[hovered.ach];
+      const node = layout.planets[hovered.planet].tiers[hovered.tier].achievements[hovered.ach];
       // show title anchored to that node
       showTitleForNode(node);
     } else if (hovered.type === 'tier') {
