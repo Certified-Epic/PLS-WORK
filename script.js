@@ -1,31 +1,29 @@
 /* script.js
-   Reworked so nodes lie on planet surfaces, stronger zoom, deterministic layout,
-   spread-out planets/tiers, mobile-friendly pointer handling (tap vs drag),
-   hologram drawn under node, title card above hologram.
-
-   Tweak the CONFIG block near the top to tune spacing and zoom levels.
+   Fixed typo + reworked glowing connector (Bezier curved path + moving pulses).
+   Deterministic on-surface node placement, mobile-friendly input.
+   Tweak CONFIG at top for spacing/zoom.
 */
 
-/* ------------- CONFIG ------------- */
+/* ========== CONFIG ========== */
 const CONFIG = {
   PLANET_COUNT: 5,
-  TIERS_PER_PLANET: 5,           // tier 0 = core (on-planet), 1..4 outward
-  CORE_RADIUS: 520,              // spread the core planets further out
-  TIER_BASE_OFFSET: 160,         // how far tier 1 is from core planet center
-  TIER_SPACING: 160,             // distance between subsequent tiers (increase for more spread)
-  CORE_PLANET_VISUAL: 420,       // larger visual planet for the core when zoomed
-  TIER_VISUAL: 120,              // size for tier planets
-  NODE_ICON: 22,                 // size of node icon
-  NODE_LABEL_OFFSET: 28,         // label offset from node
-  NODE_MIN_RADIUS_FACTOR: 0.35,  // min fraction of planet radius for node placement
-  NODE_MAX_RADIUS_FACTOR: 0.85,  // max fraction
-  ZOOM_FILL_PERCENT: 0.66,       // when zooming planet should fill ~66% of screen
-  INITIAL_SCALE: 0.38,           // slightly more zoomed out initially
+  TIERS_PER_PLANET: 5,
+  CORE_RADIUS: 520,
+  TIER_BASE_OFFSET: 160,
+  TIER_SPACING: 160,
+  CORE_PLANET_VISUAL: 420,
+  TIER_VISUAL: 120,
+  NODE_ICON: 22,
+  NODE_LABEL_OFFSET: 14,
+  NODE_MIN_RADIUS_FACTOR: 0.35,
+  NODE_MAX_RADIUS_FACTOR: 0.85,
+  ZOOM_FILL_PERCENT: 0.66,
+  INITIAL_SCALE: 0.38,
   STAR_COUNT: 140,
-  PULSE_SPEED: 0.18
+  PULSE_SPEED: 0.20   // controls pulse speed
 };
 
-/* ------------- Canvas setup ------------- */
+/* ========== Canvas setup ========== */
 const canvas = document.getElementById('starChart');
 const ctx = canvas.getContext('2d', { alpha: true });
 let DPR = Math.max(1, window.devicePixelRatio || 1);
@@ -42,7 +40,7 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-/* ------------- UI refs ------------- */
+/* ========== UI refs ========== */
 const themeColorEl = document.getElementById('themeColor');
 const monoToggle = document.getElementById('monoToggle');
 const debugToggle = document.getElementById('debugToggle');
@@ -64,7 +62,7 @@ resetBtn?.addEventListener('click', () => resetView());
 detailClose?.addEventListener('click', () => hideDetail());
 completeBtn?.addEventListener('click', () => { if (currentDetail) completeAchievement(currentDetail); hideDetail(); });
 
-/* ------------- Assets & atlas ------------- */
+/* ========== Assets & Atlas ========== */
 const ASSETS = {
   center: 'assets/center.png',
   planet: 'assets/planet.png',
@@ -84,18 +82,18 @@ const IMG = {};
 const atlas = { canvas: null, ctx: null, map: {} };
 
 function loadImage(src) {
-  return new Promise(res => {
+  return new Promise(resolve => {
     const img = new Image();
     img.src = src;
-    img.onload = () => res(img);
-    img.onerror = () => { console.warn('Failed image', src); res(null); };
+    img.onload = () => resolve(img);
+    img.onerror = () => { console.warn('Image failed to load:', src); resolve(null); };
   });
 }
 
 async function buildAtlas() {
   const keys = ['node','lock','pulse','junction','hologram','completedTier'];
   const imgs = await Promise.all(keys.map(k => loadImage(ASSETS[k])));
-  const cell = 128; const cols = 3;
+  const cell = 128, cols = 3;
   atlas.canvas = document.createElement('canvas');
   atlas.canvas.width = cell * cols;
   atlas.canvas.height = cell * Math.ceil(keys.length / cols);
@@ -108,23 +106,26 @@ async function buildAtlas() {
   });
 }
 function drawAtlas(key, x, y, size, alpha = 1) {
-  if (!atlas.canvas || !atlas.map[key]) { ctx.save(); ctx.globalAlpha = alpha; ctx.beginPath(); ctx.arc(x, y, size/2, 0, Math.PI*2); ctx.fill(); ctx.restore(); return; }
-  const m = atlas.map[key];
-  ctx.save(); ctx.globalAlpha = alpha; ctx.drawImage(atlas.canvas, m.x, m.y, m.w, m.h, x - size/2, y - size/2, size, size); ctx.restore();
+  const meta = atlas.map[key];
+  if (!atlas.canvas || !meta) {
+    ctx.save(); ctx.globalAlpha = alpha; ctx.beginPath(); ctx.arc(x,y,size/2,0,Math.PI*2); ctx.fill(); ctx.restore();
+    return;
+  }
+  ctx.save(); ctx.globalAlpha = alpha; ctx.drawImage(atlas.canvas, meta.x, meta.y, meta.w, meta.h, x - size/2, y - size/2, size, size); ctx.restore();
 }
 
-/* ------------- Background caches ------------- */
+/* ========== Background caches ========== */
 let starCache = null;
 function buildStarCache() {
   starCache = document.createElement('canvas');
   starCache.width = Math.floor(W * DPR);
   starCache.height = Math.floor(H * DPR);
-  const s = starCache.getContext('2d'); s.scale(DPR,DPR);
-  s.fillStyle = '#000'; s.fillRect(0,0,W,H);
+  const sctx = starCache.getContext('2d'); sctx.scale(DPR, DPR);
+  sctx.fillStyle = '#000'; sctx.fillRect(0,0,W,H);
   for (let i=0;i<CONFIG.STAR_COUNT;i++){
-    const x = Math.random()*W, y = Math.random()*H, r = Math.random()*1.6 + 0.2;
-    s.fillStyle = `rgba(255,255,255,${0.2 + Math.random()*0.8})`;
-    s.fillRect(x,y,r,r);
+    const x = Math.random()*W, y = Math.random()*H, r = Math.random()*1.6+0.2;
+    sctx.fillStyle = `rgba(255,255,255,${0.18 + Math.random()*0.72})`;
+    sctx.fillRect(x,y,r,r);
   }
 }
 let orbitCache = null;
@@ -132,17 +133,20 @@ function buildOrbitCache(maxR) {
   orbitCache = document.createElement('canvas');
   orbitCache.width = Math.floor(W * DPR);
   orbitCache.height = Math.floor(H * DPR);
-  const oc = orbitCache.getContext('2d'); oc.scale(DPR,DPR);
+  const oc = orbitCache.getContext('2d'); oc.scale(DPR, DPR);
   const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#00c8ff';
-  oc.strokeStyle = accent; oc.globalAlpha = 0.05; oc.lineWidth = 1;
-  for (let r=80; r<maxR; r+=40) { oc.beginPath(); oc.arc(W/2, H/2, r, 0, Math.PI*2); oc.stroke(); }
+  oc.strokeStyle = accent; oc.globalAlpha = 0.06; oc.lineWidth = 1;
+  for (let r=80; r<maxR; r+=CONFIG.TIER_SPACING/2) {
+    oc.beginPath(); oc.arc(W/2, H/2, r, 0, Math.PI*2); oc.stroke();
+  }
 }
 
-/* ------------- Data load ------------- */
+/* ========== Data load ========== */
 let achievements = { planets: [] };
 async function loadData() {
   try {
-    const r = await fetch('./achievements.json'); achievements = await r.json();
+    const res = await fetch('./achievements.json');
+    achievements = await res.json();
     const saved = localStorage.getItem('progress');
     if (saved) {
       const prog = JSON.parse(saved);
@@ -154,7 +158,7 @@ async function loadData() {
       })));
     }
   } catch (e) {
-    console.warn('achievements.json missing - building demo', e);
+    // fallback demo
     achievements = { planets: Array.from({length:CONFIG.PLANET_COUNT}).map((_,pi)=>({
       planetName:`Planet ${pi+1}`,
       tiers: Array.from({length:CONFIG.TIERS_PER_PLANET}).map((__,ti)=>({
@@ -170,45 +174,36 @@ async function loadData() {
   }
 }
 
-/* ------------- Deterministic angle generator (no runtime randomness) ------------- */
+/* ========== Deterministic node angle ========== */
 function deterministicAngle(planetIndex, tierIndex, nodeIndex) {
-  // Golden angle distribution for even spread
-  const golden = Math.PI * (3 - Math.sqrt(5)); // ~2.3999
-  // combine indices into a step for determinism
+  const golden = Math.PI * (3 - Math.sqrt(5));
   const step = ((planetIndex * 7) + (tierIndex * 11) + (nodeIndex * 13)) % 1000;
   return (step * golden) % (Math.PI*2);
 }
 
-/* ------------- Layout: deterministic positions and on-surface node placement ------------- */
+/* ========== Layout: deterministic on-surface placement ========== */
 let layout = { planets: [] };
 function buildLayout() {
   layout.planets = [];
-  const total = CONFIG.PLANET_COUNT;
-  for (let i=0;i<total;i++){
-    const angle = i * (Math.PI*2 / total) - Math.PI/2; // evenly spaced
+  for (let i=0;i<CONFIG.PLANET_COUNT;i++){
+    const angle = i * (Math.PI*2 / CONFIG.PLANET_COUNT) - Math.PI/2;
     const px = Math.cos(angle) * CONFIG.CORE_RADIUS;
     const py = Math.sin(angle) * CONFIG.CORE_RADIUS;
     const pdata = achievements.planets[i] || { planetName: `Planet ${i+1}`, tiers: [] };
     const planet = { index: i, x: px, y: py, angle, data: pdata, tiers: [] };
-
-    // tiers: deterministic radial placement (tier0 = core center)
     for (let t=0;t<CONFIG.TIERS_PER_PLANET;t++){
       const dist = (t===0) ? 0 : (CONFIG.TIER_BASE_OFFSET + (t-1) * CONFIG.TIER_SPACING);
       const tx = px + Math.cos(angle) * dist;
       const ty = py + Math.sin(angle) * dist;
-      const tdata = pdata.tiers[t] || { tierName:`Tier ${t+1}`, achievements: [] };
+      const tdata = pdata.tiers[t] || { tierName: `Tier ${t+1}`, achievements: [] };
       const tier = { index: t, x: tx, y: ty, data: tdata, achievements: [] };
-
-      // nodes: place on the planet/tier surface (not a surrounding circle)
       const count = tdata.achievements.length || 0;
       const planetRadius = (t===0) ? (CONFIG.CORE_PLANET_VISUAL/2) : (CONFIG.TIER_VISUAL/2);
       for (let n=0;n<count;n++){
-        const ang = deterministicAngle(i, t, n);
-        // radius relative to planet radius (spread across surface)
+        const ang = deterministicAngle(i,t,n);
         const rmin = CONFIG.NODE_MIN_RADIUS_FACTOR * planetRadius;
         const rmax = CONFIG.NODE_MAX_RADIUS_FACTOR * planetRadius;
-        // deterministic pseudo-random radius by using node index
-        const rfrac = 0.35 + ((n * 37 + t * 13 + i * 19) % 100) / 100 * 0.6; // 0.35 .. 0.95
+        const rfrac = 0.35 + ((n * 37 + t * 13 + i * 19) % 100) / 100 * 0.6;
         const nr = rmin + (rmax - rmin) * (rfrac - 0.35) / 0.6;
         const nx = tx + Math.cos(ang) * nr;
         const ny = ty + Math.sin(ang) * nr;
@@ -220,14 +215,13 @@ function buildLayout() {
   }
 }
 
-/* ------------- Camera + interactions ------------- */
+/* ========== Camera & Interaction ========== */
 const camera = { x:0, y:0, scale: CONFIG.INITIAL_SCALE };
 const targetCam = { x:0, y:0, scale: CONFIG.INITIAL_SCALE };
 let easing = 0.14;
 let focused = { planet: null, tier: null };
 let hovered = null;
 
-/* pointer/tap handling */
 let pointer = { down:false, startX:0, startY:0, moved:false, startTime:0 };
 canvas.addEventListener('pointerdown', e => {
   pointer.down = true; pointer.startX = e.clientX; pointer.startY = e.clientY; pointer.moved = false; pointer.startTime = Date.now();
@@ -237,12 +231,10 @@ canvas.addEventListener('pointermove', e => {
   if (pointer.down) {
     const dx = e.clientX - pointer.startX, dy = e.clientY - pointer.startY;
     if (Math.hypot(dx,dy) > 8) pointer.moved = true;
-    // panning (drag)
     if (pointer.moved) {
       const worldDx = dx / targetCam.scale;
       const worldDy = dy / targetCam.scale;
-      targetCam.x -= worldDx; // subtract because we moved screen right -> camera should move left
-      targetCam.y -= worldDy;
+      targetCam.x -= worldDx; targetCam.y -= worldDy;
       pointer.startX = e.clientX; pointer.startY = e.clientY;
     }
   } else {
@@ -251,15 +243,11 @@ canvas.addEventListener('pointermove', e => {
 });
 canvas.addEventListener('pointerup', e => {
   canvas.releasePointerCapture?.(e.pointerId);
-  if (!pointer.moved && (Date.now() - pointer.startTime) < 400) {
-    // treat as tap
-    handleTap(e.clientX, e.clientY);
-  }
+  if (!pointer.moved && (Date.now() - pointer.startTime) < 400) handleTap(e.clientX, e.clientY);
   pointer.down = false; pointer.moved = false;
 });
 canvas.addEventListener('wheel', e => { e.preventDefault(); targetCam.scale = clamp(targetCam.scale - e.deltaY * 0.0015, 0.18, 10); }, { passive:false });
 
-/* transforms */
 function screenToWorld(sx, sy) {
   const cx = W/2 + camera.x * camera.scale;
   const cy = H/2 + camera.y * camera.scale;
@@ -271,34 +259,27 @@ function worldToScreen(wx, wy) {
   return { x: cx + wx * camera.scale, y: cy + wy * camera.scale };
 }
 
-/* ------------- Hover & Tap actions ------------- */
-function updateHover(screenX, screenY) {
-  const w = screenToWorld(screenX, screenY);
+/* ========== Hover, Tap, UI ========== */
+function updateHover(sx, sy) {
+  const w = screenToWorld(sx, sy);
   hovered = null;
-  // check achievements first (so nodes get priority)
+  outer:
   for (const p of layout.planets) {
     for (const t of p.tiers) {
       for (let i=0;i<t.achievements.length;i++){
         const a = t.achievements[i];
         if (dist(w.x,w.y,a._pos.x,a._pos.y) <= Math.max(12, a._pos.r / camera.scale + 6)) {
-          hovered = { type:'achievement', planet: p.index, tier: t.index, ach: i };
-          break;
+          hovered = { type: 'achievement', planet: p.index, tier: t.index, ach: i }; break outer;
         }
       }
-      if (hovered) break;
-      // tier center
-      if (dist(w.x,w.y,t.x,t.y) < Math.max(18, CONFIG.TIER_VISUAL*0.4)) { hovered = { type:'tier', planet: p.index, tier: t.index }; break; }
+      if (dist(w.x,w.y,t.x,t.y) < Math.max(18, CONFIG.TIER_VISUAL*0.4)) { hovered = { type:'tier', planet: p.index, tier: t.index }; break outer; }
     }
-    if (hovered) break;
-    // planet center (core)
-    if (dist(w.x,w.y,p.x,p.y) < Math.max(36, CONFIG.CORE_PLANET_VISUAL*0.18)) { hovered = { type:'planet', planet: p.index }; break; }
+    if (dist(w.x,w.y,p.x,p.y) < Math.max(36, CONFIG.CORE_PLANET_VISUAL*0.18)) { hovered = { type:'planet', planet: p.index }; break outer; }
   }
 
-  // update UI
   if (hovered) {
     if (hovered.type === 'achievement') {
       const node = layout.planets[hovered.planet].tiers[hovered.tier].achievements[hovered.ach];
-      // show title anchored to that node
       showTitleForNode(node);
     } else if (hovered.type === 'tier') {
       const t = layout.planets[hovered.planet].tiers[hovered.tier];
@@ -312,22 +293,20 @@ function updateHover(screenX, screenY) {
   }
 }
 
-function handleTap(screenX, screenY) {
-  // if hovered, act on hovered; otherwise detect by coordinates
-  updateHover(screenX, screenY);
+function handleTap(sx, sy) {
+  updateHover(sx, sy);
   if (!hovered) { resetView(); return; }
   if (hovered.type === 'achievement') openDetail(hovered);
   else if (hovered.type === 'planet') zoomToPlanet(hovered.planet);
   else if (hovered.type === 'tier') zoomToTier(hovered.planet, hovered.tier);
 }
 
-/* ------------- Title card helpers ------------- */
 function showTitleForNode(node) {
   const s = worldToScreen(node._pos.x, node._pos.y);
   titleCard.style.left = s.x + 'px';
   titleCard.style.top = (s.y - 40) + 'px';
-  titleCardTitle.textContent = (node.data.title || '').toUpperCase();
-  titleCardSubtitle.textContent = (node.data.description || '').slice(0, 80);
+  titleCardTitle.textContent = (node.data.title||'').toUpperCase();
+  titleCardSubtitle.textContent = (node.data.description||'').slice(0,80);
   titleCard.classList.add('show');
 }
 function showTitleAtPoint(wx, wy, title, sub='') {
@@ -340,7 +319,7 @@ function showTitleAtPoint(wx, wy, title, sub='') {
 }
 function hideTitle() { titleCard.classList.remove('show'); }
 
-/* ------------- Detail panel ------------- */
+/* ========== Detail panel ========== */
 let currentDetail = null;
 function openDetail(h) {
   const a = layout.planets[h.planet].tiers[h.tier].achievements[h.ach];
@@ -354,67 +333,131 @@ function hideDetail() { detailPanel.classList.remove('show'); currentDetail = nu
 function completeAchievement(detail) {
   try {
     const a = achievements.planets[detail.planet].tiers[detail.tier].achievements[detail.ach];
-    a.status = 'completed'; a.dateCompleted = (new Date()).toISOString();
-    localStorage.setItem('progress', JSON.stringify(achievements));
+    if (a) { a.status = 'completed'; a.dateCompleted = new Date().toISOString(); localStorage.setItem('progress', JSON.stringify(achievements)); }
   } catch(e) { console.warn('complete failed', e); }
 }
 
-/* ------------- Zoom helpers ------------- */
-function zoomToPlanet(index) {
-  const p = layout.planets[index];
-  const screenMin = Math.min(W,H);
-  const requiredScale = (screenMin * CONFIG.ZOOM_FILL_PERCENT) / CONFIG.CORE_PLANET_VISUAL;
-  targetCam.x = -p.x; targetCam.y = -p.y; targetCam.scale = requiredScale * 1.05; // small boost
-  focused.planet = index; focused.tier = null;
+/* ========== Zoom helpers ========== */
+function zoomToPlanet(idx) {
+  const p = layout.planets[idx];
+  const smin = Math.min(W,H);
+  const req = (smin * CONFIG.ZOOM_FILL_PERCENT) / CONFIG.CORE_PLANET_VISUAL;
+  targetCam.x = -p.x; targetCam.y = -p.y; targetCam.scale = req * 1.05;
+  focused.planet = idx; focused.tier = null;
   hideDetail(); hideTitle();
 }
-function zoomToTier(pIndex, tIndex) {
-  const t = layout.planets[pIndex].tiers[tIndex];
-  const screenMin = Math.min(W,H);
-  const requiredScale = (screenMin * CONFIG.ZOOM_FILL_PERCENT) / (CONFIG.TIER_VISUAL * 1.6);
-  targetCam.x = -t.x; targetCam.y = -t.y; targetCam.scale = requiredScale * 1.2;
-  focused.planet = pIndex; focused.tier = tIndex;
+function zoomToTier(pi, ti) {
+  const t = layout.planets[pi].tiers[ti];
+  const smin = Math.min(W,H);
+  const req = (smin * CONFIG.ZOOM_FILL_PERCENT) / (CONFIG.TIER_VISUAL * 1.6);
+  targetCam.x = -t.x; targetCam.y = -t.y; targetCam.scale = req * 1.12;
+  focused.planet = pi; focused.tier = ti;
   hideDetail(); hideTitle();
 }
 function resetView() { targetCam.x = 0; targetCam.y = 0; targetCam.scale = CONFIG.INITIAL_SCALE; focused.planet = null; focused.tier = null; hideDetail(); hideTitle(); }
 
-/* ------------- Drawing utilities ------------- */
-function lerp(a,b,t){ return a + (b-a) * t; }
-function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
-function dist(x1,y1,x2,y2){ return Math.hypot(x1-x2, y1-y2); }
-
-function drawGlowingConnector(x1,y1,x2,y2, accent, prog) {
-  // faint stroke
-  ctx.save(); ctx.globalAlpha = 0.08; ctx.strokeStyle = accent; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); ctx.restore();
-  // glow stroke
-  ctx.save(); ctx.lineWidth = 2.8; ctx.strokeStyle = accent; ctx.shadowBlur = 10; ctx.shadowColor = accent; ctx.globalAlpha = 0.12; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); ctx.restore();
-  // pulse
-  const px = x1 + (x2 - x1) * prog, py = y1 + (y2 - y1) * prog;
-  ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = accent; ctx.shadowBlur = 18; ctx.shadowColor = accent; ctx.globalAlpha = 0.92; ctx.beginPath(); ctx.arc(px, py, 6 + Math.sin(perfTime*6)*1.2, 0, Math.PI*2); ctx.fill(); ctx.restore();
+/* ========== Glowing connector: curved Bezier + moving pulses ========== */
+/* Quadratic Bezier helper */
+function bezierPoint(t, p0, cp, p1) {
+  const u = 1 - t;
+  const x = u*u*p0.x + 2*u*t*cp.x + t*t*p1.x;
+  const y = u*u*p0.y + 2*u*t*cp.y + t*t*p1.y;
+  return { x, y };
+}
+/* Get control point: midpoint plus perpendicular offset scaled by distance */
+function controlPointFor(x1,y1,x2,y2, strength = 0.26) {
+  const mx = (x1 + x2) / 2;
+  const my = (y1 + y2) / 2;
+  const dx = x2 - x1, dy = y2 - y1;
+  const dist = Math.hypot(dx, dy);
+  // perpendicular
+  const px = -dy / (dist || 1);
+  const py = dx / (dist || 1);
+  const offset = Math.min(dist * strength, 260); // cap offset
+  return { x: mx + px * offset, y: my + py * offset };
 }
 
-let perfTime = 0;
+/* Draw curved glowing connector and moving pulses */
+function drawGlowingConnectorBezier(x1,y1,x2,y2, accent, tNow) {
+  // compute control point once (curve)
+  const cp = controlPointFor(x1,y1,x2,y2, 0.22);
 
-/* ------------- Main draw loop ------------- */
-let animTime = 0;
+  // base thin stroke
+  ctx.save();
+  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = accent;
+  ctx.globalAlpha = 0.08;
+  ctx.beginPath();
+  ctx.moveTo(x1,y1);
+  ctx.quadraticCurveTo(cp.x, cp.y, x2, y2);
+  ctx.stroke();
+  ctx.restore();
+
+  // glow stroke (fatter with shadow)
+  ctx.save();
+  ctx.lineWidth = 2.6;
+  ctx.strokeStyle = accent;
+  ctx.shadowBlur = 14;
+  ctx.shadowColor = accent;
+  ctx.globalAlpha = 0.11;
+  ctx.beginPath();
+  ctx.moveTo(x1,y1);
+  ctx.quadraticCurveTo(cp.x, cp.y, x2, y2);
+  ctx.stroke();
+  ctx.restore();
+
+  // draw several small pulses moving along the curve (gives sense of flow)
+  const pulses = 5; // number of light blobs per connector
+  for (let i=0;i<pulses;i++){
+    // phases offset so they are spaced
+    const phase = (tNow * (CONFIG.PULSE_SPEED * 0.7) + i * (1 / pulses)) % 1;
+    // easing so pulse has a head and tail
+    const eased = (Math.sin(Math.PI * (phase)) ** 1.6); // fade-in/out
+    const p = bezierPoint(phase, {x:x1,y:y1}, cp, {x:x2,y:y2});
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    // main glow ring
+    const size = 6 + eased * 8;
+    ctx.fillStyle = accent;
+    ctx.shadowBlur = 20 * eased;
+    ctx.shadowColor = accent;
+    ctx.globalAlpha = 0.9 * eased;
+    ctx.beginPath(); ctx.arc(p.x, p.y, size, 0, Math.PI*2); ctx.fill();
+    // small core bright dot
+    ctx.shadowBlur = 0;
+    ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(1.5, size*0.28), 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  // optional series of micro points along the curve for a "trail" effect
+  // draw faint micro dots along the curve spaced by some step
+  ctx.save();
+  ctx.globalAlpha = 0.06;
+  ctx.fillStyle = accent;
+  for (let s=0; s<=1; s+=0.08) {
+    const p = bezierPoint(s, {x:x1,y:y1}, cp, {x:x2,y:y2});
+    ctx.beginPath(); ctx.arc(p.x, p.y, 1.2, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+/* ========== Draw loop ========== */
+let anim = 0;
 function draw() {
-  animTime += 1/60;
-  perfTime = animTime;
+  anim += 1/60;
   // smooth camera
   camera.x = lerp(camera.x, targetCam.x, easing);
   camera.y = lerp(camera.y, targetCam.y, easing);
   camera.scale = lerp(camera.scale, targetCam.scale, easing);
 
-  // background
   ctx.clearRect(0,0,W,H);
   if (starCache) ctx.drawImage(starCache, 0, 0, W, H);
 
-  // world transform
   ctx.save();
   ctx.translate(W/2 + camera.x * camera.scale, H/2 + camera.y * camera.scale);
   ctx.scale(camera.scale, camera.scale);
 
-  // draw orbit cache (screen space)
+  // orbit cache in screen space
   if (orbitCache) {
     ctx.setTransform(1,0,0,1,0,0);
     ctx.drawImage(orbitCache, 0, 0, W*DPR, H*DPR, 0, 0, W, H);
@@ -423,57 +466,57 @@ function draw() {
     ctx.scale(camera.scale, camera.scale);
   }
 
-  // center image
+  // center
   if (IMG.center) ctx.drawImage(IMG.center, -130, -130, 260, 260);
 
   const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#00c8ff';
 
-  // planets & tiers
+  // planets and tiers; draw connectors using bezier function
   for (const p of layout.planets) {
-    // draw core planet (tier 0)
-    const coreSize = CONFIG.CORE_PLANET_VISUAL;
-    if (IMG.planet) ctx.drawImage(IMG.planet, p.x - coreSize/2, p.y - coreSize/2, coreSize, coreSize);
-    else { ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(p.x,p.y,coreSize/2,0,Math.PI*2); ctx.fill(); }
+    // core planet
+    if (IMG.planet) ctx.drawImage(IMG.planet, p.x - CONFIG.CORE_PLANET_VISUAL/2, p.y - CONFIG.CORE_PLANET_VISUAL/2, CONFIG.CORE_PLANET_VISUAL, CONFIG.CORE_PLANET_VISUAL);
+    else { ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(p.x,p.y,CONFIG.CORE_PLANET_VISUAL/2,0,Math.PI*2); ctx.fill(); }
 
-    // label
-    ctx.save(); ctx.fillStyle = '#fff'; ctx.font='bold 14px Electrolize, Arial'; ctx.textAlign = 'center'; ctx.fillText((p.data.planetName||'').toUpperCase(), p.x, p.y + coreSize/2 + 18 / camera.scale); ctx.restore();
+    ctx.save(); ctx.fillStyle = '#fff'; ctx.font='bold 14px Electrolize, Arial'; ctx.textAlign='center';
+    ctx.fillText((p.data.planetName||'').toUpperCase(), p.x, p.y + CONFIG.CORE_PLANET_VISUAL/2 + 18 / camera.scale);
+    ctx.restore();
 
-    // tiers connectors + pulses + tier planet draw
     for (const t of p.tiers) {
-      // connector progress
-      const prog = (animTime * (CONFIG.PULSE_SPEED + (t.index * 0.02))) % 1;
-      drawGlowingConnector(p.x, p.y, t.x, t.y, accent, prog);
+      // draw connector curve with pulses
+      drawGlowingConnectorBezier(p.x, p.y, t.x, t.y, accent, anim);
 
-      // draw tier planet (choose tier image if available)
+      // draw tier planet
       const tierSize = CONFIG.TIER_VISUAL;
-      const tierKey = t.index === 0 ? 'planet' : `tier${Math.min(5, t.index+1)}`; // tier2..tier5 keys
+      const tierKey = t.index === 0 ? 'planet' : `tier${Math.min(5, t.index+1)}`;
       if (t.index === 0 && IMG.planet) ctx.drawImage(IMG.planet, t.x - tierSize/2, t.y - tierSize/2, tierSize, tierSize);
       else if (IMG[tierKey]) ctx.drawImage(IMG[tierKey], t.x - tierSize/2, t.y - tierSize/2, tierSize, tierSize);
       else if (IMG.planet) ctx.drawImage(IMG.planet, t.x - tierSize/2, t.y - tierSize/2, tierSize, tierSize);
       else { ctx.fillStyle='#333'; ctx.beginPath(); ctx.arc(t.x,t.y,tierSize/2,0,Math.PI*2); ctx.fill(); }
 
-      // junction always visible (floating)
+      // junction floating
       const jx = t.x + (t.x - p.x) * 0.12;
       const jy = t.y + (t.y - p.y) * 0.12;
       drawAtlas('junction', jx, jy, 20, 1);
 
       // tier label
-      ctx.save(); ctx.fillStyle = '#fff'; ctx.font='11px Electrolize, Arial'; ctx.textAlign='center'; ctx.fillText((t.data.tierName||`Tier ${t.index+1}`).toUpperCase(), t.x, t.y - tierSize/2 - 8); ctx.restore();
+      ctx.save(); ctx.fillStyle = '#fff'; ctx.font='11px Electrolize, Arial'; ctx.textAlign='center';
+      ctx.fillText((t.data.tierName||`Tier ${t.index+1}`).toUpperCase(), t.x, t.y - tierSize/2 - 8);
+      ctx.restore();
 
-      // nodes drawn ON planet surface: hologram (under), node icon (on top), label nearby
+      // nodes on surface: holo under, node icon, small label
       for (let ni=0; ni<t.achievements.length; ni++){
         const node = t.achievements[ni];
-        // draw hologram under node with alpha
+        // hologram under node using atlas
         drawAtlas('hologram', node._pos.x, node._pos.y, Math.max(36, node._pos.r*2.4), node._hover || 0);
 
-        // node icon
+        // node icon on top
         const key = (node.data.status === 'locked') ? 'lock' : 'node';
         drawAtlas(key, node._pos.x, node._pos.y, CONFIG.NODE_ICON, 1);
 
-        // label (if zoomed enough or always show small)
-        const showLabel = camera.scale > 1.1 || (window.innerWidth > 700);
+        // label
+        const showLabel = camera.scale > 1.0 || (window.innerWidth > 700);
         if (showLabel) {
-          ctx.save(); ctx.fillStyle = '#fff'; ctx.font = '11px Electrolize, Arial'; ctx.textAlign = 'left';
+          ctx.save(); ctx.fillStyle = '#fff'; ctx.font='11px Electrolize, Arial'; ctx.textAlign='left';
           ctx.fillText((node.data.title||'').toUpperCase(), node._pos.x + CONFIG.NODE_LABEL_OFFSET, node._pos.y + 4);
           ctx.restore();
         }
@@ -492,11 +535,10 @@ function draw() {
   requestAnimationFrame(draw);
 }
 
-/* ------------- Init (load assets, build caches, layout) ------------- */
+/* ========== Init sequence ========== */
 async function init() {
   document.documentElement.style.setProperty('--accent', (themeColorEl?.value) || '#00c8ff');
 
-  // preload images used often
   IMG.center = await loadImage(ASSETS.center);
   IMG.planet = await loadImage(ASSETS.planet);
   IMG.planethover = await loadImage(ASSETS.planethover);
@@ -505,29 +547,22 @@ async function init() {
   IMG.tier4 = await loadImage(ASSETS.tier4);
   IMG.tier5 = await loadImage(ASSETS.tier5);
 
-  // build small atlas for icons/hologram
   await buildAtlas();
-
-  // caches
   buildStarCache();
-  buildOrbitCache(Math.max(W, H) * 0.95);
-
-  // data and layout
+  buildOrbitCache(Math.max(W,H) * 0.95);
   await loadData();
   buildLayout();
 
-  // initial camera
   camera.x = targetCam.x = 0; camera.y = targetCam.y = 0; camera.scale = targetCam.scale = CONFIG.INITIAL_SCALE;
 
-  // start draw
   requestAnimationFrame(draw);
 }
 init().catch(e => console.error('Init error', e));
 
-/* ------------- Utilities & admin helpers ------------- */
+/* ========== Small utils/admin ========== */
 function lerp(a,b,t){ return a + (b-a) * t; }
 function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
-function dist(a,b,c,d){ return Math.hypot(a-c, b-d); }
+function dist(x1,y1,x2,y2){ return Math.hypot(x1-x2, y1-y2); }
 
 window.loginAdmin = function() {
   const pass = document.getElementById('adminPassword')?.value;
@@ -553,4 +588,3 @@ window.downloadJson = ()=>{ const blob = new Blob([JSON.stringify(achievements,n
 window.bulkUnlock = ()=>{ achievements.planets.forEach(p=>p.tiers.forEach(t=>t.achievements.forEach(a=>a.status='available'))); localStorage.setItem('progress', JSON.stringify(achievements)); alert('All unlocked'); };
 window.bulkReset = ()=>{ achievements.planets.forEach(p=>p.tiers.forEach((t,j)=>t.achievements.forEach(a=>{ a.status = j===0? 'available':'locked'; a.dateCompleted = null; }))); localStorage.setItem('progress', JSON.stringify(achievements)); alert('All reset'); };
 
-/* End of file */
