@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Star Chart — Glowing Paths</title>
+  <title>Star Chart — Reworked</title>
   <link href="https://fonts.googleapis.com/css2?family=Electrolize&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
@@ -20,12 +20,12 @@
 
   <canvas id="starChart" aria-label="Star chart"></canvas>
 
-  <!-- Minecraft-style title card (icon placeholder left) -->
+  <!-- Minecraft-style achievement/title card (icon placeholder left) -->
   <div id="titleCard" class="title-card" aria-hidden="true">
-    <div class="card-icon" id="cardIcon"></div>
+    <div id="cardIcon" class="card-icon">★</div>
     <div class="card-text">
-      <div id="titleCardTitle" class="card-title"></div>
-      <div id="titleCardSubtitle" class="card-sub"></div>
+      <div id="titleCardTitle" class="card-title">ACHIEVEMENT TITLE</div>
+      <div id="titleCardSubtitle" class="card-sub">Short description or requirement</div>
     </div>
   </div>
 
@@ -41,7 +41,6 @@
     </div>
   </div>
 
-  <!-- admin -->
   <div id="adminPanel" class="admin-panel" style="display:none;">
     <input id="adminPassword" placeholder="admin password" type="password">
     <button onclick="loginAdmin()">Login</button>
