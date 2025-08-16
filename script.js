@@ -1,31 +1,34 @@
 /* script.js
-   Reworked so nodes lie on planet surfaces, stronger zoom, deterministic layout,
-   spread-out planets/tiers, mobile-friendly pointer handling (tap vs drag),
-   hologram drawn under node, title card above hologram.
-
-   Tweak the CONFIG block near the top to tune spacing and zoom levels.
+   - Glowing gradient connectors (brighter towards destination)
+   - Cached backgrounds (stars, orbit rings, vanishing point)
+   - 5 core planets, 4 outer tiers each (20 tier planets total) deterministically placed
+   - Nodes placed on planet surfaces with labels
+   - Lock-on zoom behavior and scroll behavior reworked
+   - Title card (minecraft-like) with placeholder icon
 */
 
-/* ------------- CONFIG ------------- */
+/* CONFIG - tweak sizes / spacing here */
 const CONFIG = {
   PLANET_COUNT: 5,
-  TIERS_PER_PLANET: 5,           // tier 0 = core (on-planet), 1..4 outward
-  CORE_RADIUS: 520,              // spread the core planets further out
-  TIER_BASE_OFFSET: 160,         // how far tier 1 is from core planet center
-  TIER_SPACING: 160,             // distance between subsequent tiers (increase for more spread)
-  CORE_PLANET_VISUAL: 420,       // larger visual planet for the core when zoomed
-  TIER_VISUAL: 120,              // size for tier planets
-  NODE_ICON: 22,                 // size of node icon
-  NODE_LABEL_OFFSET: 28,         // label offset from node
-  NODE_MIN_RADIUS_FACTOR: 0.35,  // min fraction of planet radius for node placement
-  NODE_MAX_RADIUS_FACTOR: 0.85,  // max fraction
-  ZOOM_FILL_PERCENT: 0.66,       // when zooming planet should fill ~66% of screen
-  INITIAL_SCALE: 0.38,           // slightly more zoomed out initially
+  TIERS_PER_PLANET: 5,            // includes tier 0 (core) + 4 outer = 20 tier planets total
+  CORE_RADIUS: 520,
+  TIER_BASE_OFFSET: 160,
+  TIER_SPACING: 160,
+  CORE_VISUAL: 420,
+  TIER_VISUAL: 120,
+  NODE_ICON: 22,
+  NODE_LABEL_OFFSET: 28,
+  NODE_MIN_RF: 0.35,
+  NODE_MAX_RF: 0.85,
+  ZOOM_FILL_PCT: 0.66,
+  INITIAL_SCALE: 0.38,
   STAR_COUNT: 140,
-  PULSE_SPEED: 0.18
+  GLOW_THICKNESS: 3,
+  LOCK_SCALE_THRESHOLD: 2.6, // if camera scale > this, lock-on behavior can be applied
+  UNLOCK_SCALE_THRESHOLD: 1.2, // if below this, camera unlocks and recenters
 };
 
-/* ------------- Canvas setup ------------- */
+/* Canvas setup */
 const canvas = document.getElementById('starChart');
 const ctx = canvas.getContext('2d', { alpha: true });
 let DPR = Math.max(1, window.devicePixelRatio || 1);
@@ -42,13 +45,14 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-/* ------------- UI refs ------------- */
+/* UI elements */
 const themeColorEl = document.getElementById('themeColor');
 const monoToggle = document.getElementById('monoToggle');
 const debugToggle = document.getElementById('debugToggle');
 const resetBtn = document.getElementById('resetView');
 
 const titleCard = document.getElementById('titleCard');
+const cardIcon = document.getElementById('cardIcon');
 const titleCardTitle = document.getElementById('titleCardTitle');
 const titleCardSubtitle = document.getElementById('titleCardSubtitle');
 
@@ -64,7 +68,7 @@ resetBtn?.addEventListener('click', () => resetView());
 detailClose?.addEventListener('click', () => hideDetail());
 completeBtn?.addEventListener('click', () => { if (currentDetail) completeAchievement(currentDetail); hideDetail(); });
 
-/* ------------- Assets & atlas ------------- */
+/* Assets list */
 const ASSETS = {
   center: 'assets/center.png',
   planet: 'assets/planet.png',
@@ -88,14 +92,15 @@ function loadImage(src) {
     const img = new Image();
     img.src = src;
     img.onload = () => res(img);
-    img.onerror = () => { console.warn('Failed image', src); res(null); };
+    img.onerror = () => { console.warn('Image failed to load:', src); res(null); };
   });
 }
 
+/* Build a tiny atlas for icons */
 async function buildAtlas() {
   const keys = ['node','lock','pulse','junction','hologram','completedTier'];
   const imgs = await Promise.all(keys.map(k => loadImage(ASSETS[k])));
-  const cell = 128; const cols = 3;
+  const cell = 128, cols = 3;
   atlas.canvas = document.createElement('canvas');
   atlas.canvas.width = cell * cols;
   atlas.canvas.height = cell * Math.ceil(keys.length / cols);
@@ -108,22 +113,27 @@ async function buildAtlas() {
   });
 }
 function drawAtlas(key, x, y, size, alpha = 1) {
-  if (!atlas.canvas || !atlas.map[key]) { ctx.save(); ctx.globalAlpha = alpha; ctx.beginPath(); ctx.arc(x, y, size/2, 0, Math.PI*2); ctx.fill(); ctx.restore(); return; }
-  const m = atlas.map[key];
-  ctx.save(); ctx.globalAlpha = alpha; ctx.drawImage(atlas.canvas, m.x, m.y, m.w, m.h, x - size/2, y - size/2, size, size); ctx.restore();
+  const meta = atlas.map[key];
+  if (!atlas.canvas || !meta) {
+    ctx.save(); ctx.globalAlpha = alpha; ctx.beginPath(); ctx.arc(x,y,size/2,0,Math.PI*2); ctx.fill(); ctx.restore();
+    return;
+  }
+  ctx.save(); ctx.globalAlpha = alpha;
+  ctx.drawImage(atlas.canvas, meta.x, meta.y, meta.w, meta.h, x - size/2, y - size/2, size, size);
+  ctx.restore();
 }
 
-/* ------------- Background caches ------------- */
+/* Background caches */
 let starCache = null;
 function buildStarCache() {
   starCache = document.createElement('canvas');
   starCache.width = Math.floor(W * DPR);
   starCache.height = Math.floor(H * DPR);
-  const s = starCache.getContext('2d'); s.scale(DPR,DPR);
+  const s = starCache.getContext('2d'); s.scale(DPR, DPR);
   s.fillStyle = '#000'; s.fillRect(0,0,W,H);
   for (let i=0;i<CONFIG.STAR_COUNT;i++){
-    const x = Math.random()*W, y = Math.random()*H, r = Math.random()*1.6 + 0.2;
-    s.fillStyle = `rgba(255,255,255,${0.2 + Math.random()*0.8})`;
+    const x = Math.random()*W, y = Math.random()*H, r = Math.random()*1.6+0.2;
+    s.fillStyle = `rgba(255,255,255,${0.18 + Math.random()*0.72})`;
     s.fillRect(x,y,r,r);
   }
 }
@@ -132,17 +142,26 @@ function buildOrbitCache(maxR) {
   orbitCache = document.createElement('canvas');
   orbitCache.width = Math.floor(W * DPR);
   orbitCache.height = Math.floor(H * DPR);
-  const oc = orbitCache.getContext('2d'); oc.scale(DPR,DPR);
+  const oc = orbitCache.getContext('2d'); oc.scale(DPR, DPR);
   const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#00c8ff';
-  oc.strokeStyle = accent; oc.globalAlpha = 0.05; oc.lineWidth = 1;
-  for (let r=80; r<maxR; r+=40) { oc.beginPath(); oc.arc(W/2, H/2, r, 0, Math.PI*2); oc.stroke(); }
+  oc.strokeStyle = accent; oc.globalAlpha = 0.06; oc.lineWidth = 1;
+  // draw multiple rings that get perspective blur (simple)
+  for (let r = 80; r < maxR; r += CONFIG.TIER_SPACING/2) {
+    oc.beginPath(); oc.arc(W/2, H/2, r, 0, Math.PI*2); oc.stroke();
+  }
+  // vanishing point marker (subtle)
+  const g = oc.createRadialGradient(W/2, H/2, 0, W/2, H/2, 300);
+  g.addColorStop(0, 'rgba(255,255,255,0.06)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  oc.fillStyle = g; oc.beginPath(); oc.arc(W/2, H/2, 300, 0, Math.PI*2); oc.fill();
 }
 
-/* ------------- Data load ------------- */
+/* Load data (achievements.json or demo) */
 let achievements = { planets: [] };
 async function loadData() {
   try {
-    const r = await fetch('./achievements.json'); achievements = await r.json();
+    const res = await fetch('./achievements.json');
+    achievements = await res.json();
     const saved = localStorage.getItem('progress');
     if (saved) {
       const prog = JSON.parse(saved);
@@ -154,7 +173,7 @@ async function loadData() {
       })));
     }
   } catch (e) {
-    console.warn('achievements.json missing - building demo', e);
+    console.warn('achievements.json missing — building demo', e);
     achievements = { planets: Array.from({length:CONFIG.PLANET_COUNT}).map((_,pi)=>({
       planetName:`Planet ${pi+1}`,
       tiers: Array.from({length:CONFIG.TIERS_PER_PLANET}).map((__,ti)=>({
@@ -170,49 +189,39 @@ async function loadData() {
   }
 }
 
-/* ------------- Deterministic angle generator (no runtime randomness) ------------- */
+/* Deterministic angle generator */
 function deterministicAngle(planetIndex, tierIndex, nodeIndex) {
-  // Golden angle distribution for even spread
-  const golden = Math.PI * (3 - Math.sqrt(5)); // ~2.3999
-  // combine indices into a step for determinism
+  const golden = Math.PI * (3 - Math.sqrt(5));
   const step = ((planetIndex * 7) + (tierIndex * 11) + (nodeIndex * 13)) % 1000;
   return (step * golden) % (Math.PI*2);
 }
 
-/* ------------- Layout: deterministic positions and on-surface node placement ------------- */
+/* Layout: 5 core planets, each 5 tiers (first is core). Nodes on surface of each tier */
 let layout = { planets: [] };
 function buildLayout() {
   layout.planets = [];
-  const total = CONFIG.PLANET_COUNT;
-  for (let i=0;i<total;i++){
-    const angle = i * (Math.PI*2 / total) - Math.PI/2; // evenly spaced
+  for (let i=0;i<CONFIG.PLANET_COUNT;i++){
+    const angle = i * (Math.PI*2 / CONFIG.PLANET_COUNT) - Math.PI/2;
     const px = Math.cos(angle) * CONFIG.CORE_RADIUS;
     const py = Math.sin(angle) * CONFIG.CORE_RADIUS;
     const pdata = achievements.planets[i] || { planetName: `Planet ${i+1}`, tiers: [] };
-    const planet = { index: i, x: px, y: py, angle, data: pdata, tiers: [] };
-
-    // tiers: deterministic radial placement (tier0 = core center)
+    const planet = { index:i, x:px, y:py, angle, data: pdata, tiers: [] };
     for (let t=0;t<CONFIG.TIERS_PER_PLANET;t++){
       const dist = (t===0) ? 0 : (CONFIG.TIER_BASE_OFFSET + (t-1) * CONFIG.TIER_SPACING);
       const tx = px + Math.cos(angle) * dist;
       const ty = py + Math.sin(angle) * dist;
-      const tdata = pdata.tiers[t] || { tierName:`Tier ${t+1}`, achievements: [] };
-      const tier = { index: t, x: tx, y: ty, data: tdata, achievements: [] };
-
-      // nodes: place on the planet/tier surface (not a surrounding circle)
+      const tdata = pdata.tiers[t] || { tierName: `Tier ${t+1}`, achievements: [] };
+      const tier = { index:t, x:tx, y:ty, data: tdata, achievements: [] };
       const count = tdata.achievements.length || 0;
-      const planetRadius = (t===0) ? (CONFIG.CORE_PLANET_VISUAL/2) : (CONFIG.TIER_VISUAL/2);
+      const pr = (t===0)? (CONFIG.CORE_VISUAL/2) : (CONFIG.TIER_VISUAL/2);
       for (let n=0;n<count;n++){
-        const ang = deterministicAngle(i, t, n);
-        // radius relative to planet radius (spread across surface)
-        const rmin = CONFIG.NODE_MIN_RADIUS_FACTOR * planetRadius;
-        const rmax = CONFIG.NODE_MAX_RADIUS_FACTOR * planetRadius;
-        // deterministic pseudo-random radius by using node index
-        const rfrac = 0.35 + ((n * 37 + t * 13 + i * 19) % 100) / 100 * 0.6; // 0.35 .. 0.95
+        const ang = deterministicAngle(i,t,n);
+        const rmin = CONFIG.NODE_MIN_RF * pr, rmax = CONFIG.NODE_MAX_RF * pr;
+        const rfrac = 0.35 + ((n*37 + t*13 + i*19) % 100)/100 * 0.6;
         const nr = rmin + (rmax - rmin) * (rfrac - 0.35) / 0.6;
         const nx = tx + Math.cos(ang) * nr;
         const ny = ty + Math.sin(ang) * nr;
-        tier.achievements.push({ data: tdata.achievements[n], _pos: { x: nx, y: ny, r: CONFIG.NODE_ICON }, _hover: 0 });
+        tier.achievements.push({ data: tdata.achievements[n], _pos: { x:nx, y:ny, r: CONFIG.NODE_ICON }, _hover: 0 });
       }
       planet.tiers.push(tier);
     }
@@ -220,14 +229,14 @@ function buildLayout() {
   }
 }
 
-/* ------------- Camera + interactions ------------- */
+/* Camera & interaction */
 const camera = { x:0, y:0, scale: CONFIG.INITIAL_SCALE };
 const targetCam = { x:0, y:0, scale: CONFIG.INITIAL_SCALE };
 let easing = 0.14;
 let focused = { planet: null, tier: null };
 let hovered = null;
+let lockedPlanet = null; // index of planet camera locked to (null if none)
 
-/* pointer/tap handling */
 let pointer = { down:false, startX:0, startY:0, moved:false, startTime:0 };
 canvas.addEventListener('pointerdown', e => {
   pointer.down = true; pointer.startX = e.clientX; pointer.startY = e.clientY; pointer.moved = false; pointer.startTime = Date.now();
@@ -237,12 +246,9 @@ canvas.addEventListener('pointermove', e => {
   if (pointer.down) {
     const dx = e.clientX - pointer.startX, dy = e.clientY - pointer.startY;
     if (Math.hypot(dx,dy) > 8) pointer.moved = true;
-    // panning (drag)
-    if (pointer.moved) {
-      const worldDx = dx / targetCam.scale;
-      const worldDy = dy / targetCam.scale;
-      targetCam.x -= worldDx; // subtract because we moved screen right -> camera should move left
-      targetCam.y -= worldDy;
+    if (pointer.moved && !lockedPlanet) {
+      const worldDx = dx / targetCam.scale, worldDy = dy / targetCam.scale;
+      targetCam.x -= worldDx; targetCam.y -= worldDy;
       pointer.startX = e.clientX; pointer.startY = e.clientY;
     }
   } else {
@@ -251,15 +257,35 @@ canvas.addEventListener('pointermove', e => {
 });
 canvas.addEventListener('pointerup', e => {
   canvas.releasePointerCapture?.(e.pointerId);
-  if (!pointer.moved && (Date.now() - pointer.startTime) < 400) {
-    // treat as tap
-    handleTap(e.clientX, e.clientY);
-  }
+  if (!pointer.moved && (Date.now() - pointer.startTime) < 400) handleTap(e.clientX, e.clientY);
   pointer.down = false; pointer.moved = false;
 });
-canvas.addEventListener('wheel', e => { e.preventDefault(); targetCam.scale = clamp(targetCam.scale - e.deltaY * 0.0015, 0.18, 10); }, { passive:false });
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  // wheel modifies targetCam.scale; if locked to a planet, zoom around that planet
+  const delta = -e.deltaY * 0.0015;
+  const newScale = clamp(targetCam.scale + delta, 0.18, 10);
+  // if locked, keep camera x/y anchored to locked planet world pos
+  if (lockedPlanet !== null) {
+    const p = layout.planets[lockedPlanet];
+    // set targetCam to keep planet centered
+    targetCam.scale = newScale;
+    targetCam.x = -p.x;
+    targetCam.y = -p.y;
+  } else {
+    targetCam.scale = newScale;
+  }
 
-/* transforms */
+  // if scale drops below unlock threshold, unlock and recenter on origin
+  if (targetCam.scale < CONFIG.UNLOCK_SCALE_THRESHOLD && lockedPlanet !== null) {
+    lockedPlanet = null;
+    // smooth recenter to 0
+    // (we set targetCam.x/y to 0, leaving scale as is)
+    targetCam.x = 0; targetCam.y = 0;
+  }
+}, { passive:false });
+
+/* Screen-world transforms */
 function screenToWorld(sx, sy) {
   const cx = W/2 + camera.x * camera.scale;
   const cy = H/2 + camera.y * camera.scale;
@@ -271,76 +297,78 @@ function worldToScreen(wx, wy) {
   return { x: cx + wx * camera.scale, y: cy + wy * camera.scale };
 }
 
-/* ------------- Hover & Tap actions ------------- */
-function updateHover(screenX, screenY) {
-  const w = screenToWorld(screenX, screenY);
+/* Hover/tap/interaction helpers */
+function updateHover(sx, sy) {
+  const w = screenToWorld(sx, sy);
   hovered = null;
-  // check achievements first (so nodes get priority)
+  outer:
   for (const p of layout.planets) {
     for (const t of p.tiers) {
       for (let i=0;i<t.achievements.length;i++){
         const a = t.achievements[i];
         if (dist(w.x,w.y,a._pos.x,a._pos.y) <= Math.max(12, a._pos.r / camera.scale + 6)) {
-          hovered = { type:'achievement', planet: p.index, tier: t.index, ach: i };
-          break;
+          hovered = { type:'achievement', planet: p.index, tier: t.index, ach: i }; break outer;
         }
       }
-      if (hovered) break;
-      // tier center
-      if (dist(w.x,w.y,t.x,t.y) < Math.max(18, CONFIG.TIER_VISUAL*0.4)) { hovered = { type:'tier', planet: p.index, tier: t.index }; break; }
+      if (dist(w.x,w.y,t.x,t.y) < Math.max(18, CONFIG.TIER_VISUAL*0.4)) { hovered = { type:'tier', planet: p.index, tier: t.index }; break outer; }
     }
-    if (hovered) break;
-    // planet center (core)
-    if (dist(w.x,w.y,p.x,p.y) < Math.max(36, CONFIG.CORE_PLANET_VISUAL*0.18)) { hovered = { type:'planet', planet: p.index }; break; }
+    if (dist(w.x,w.y,p.x,p.y) < Math.max(36, CONFIG.CORE_VISUAL*0.18)) { hovered = { type:'planet', planet: p.index }; break outer; }
   }
 
-  // update UI
   if (hovered) {
     if (hovered.type === 'achievement') {
       const node = layout.planets[hovered.planet].tiers[hovered.tier].achievements[hovered.ach];
-      // show title anchored to that node
       showTitleForNode(node);
     } else if (hovered.type === 'tier') {
       const t = layout.planets[hovered.planet].tiers[hovered.tier];
       showTitleAtPoint(t.x, t.y, (t.data.tierName||'').toUpperCase(), `${t.data.achievements.length || 0} NODES`);
     } else if (hovered.type === 'planet') {
       const p = layout.planets[hovered.planet];
-      showTitleAtPoint(p.x, p.y, (p.data.planetName||'').toUpperCase(), 'CLICK TO ZOOM');
+      showTitleAtPoint(p.x, p.y, (p.data.planetName||'').toUpperCase(), 'CLICK TO FOCUS');
     }
   } else {
     hideTitle();
   }
 }
 
-function handleTap(screenX, screenY) {
-  // if hovered, act on hovered; otherwise detect by coordinates
-  updateHover(screenX, screenY);
+function handleTap(sx, sy) {
+  updateHover(sx, sy);
   if (!hovered) { resetView(); return; }
   if (hovered.type === 'achievement') openDetail(hovered);
-  else if (hovered.type === 'planet') zoomToPlanet(hovered.planet);
-  else if (hovered.type === 'tier') zoomToTier(hovered.planet, hovered.tier);
+  else if (hovered.type === 'planet') {
+    // click locks to planet (click => lock camera & zoom in)
+    const idx = hovered.planet;
+    lockToPlanet(idx);
+    zoomToPlanet(idx);
+  }
+  else if (hovered.type === 'tier') {
+    lockToPlanet(hovered.planet);
+    zoomToTier(hovered.planet, hovered.tier);
+  }
 }
 
-/* ------------- Title card helpers ------------- */
+/* Title card (minecraft-like) */
 function showTitleForNode(node) {
   const s = worldToScreen(node._pos.x, node._pos.y);
   titleCard.style.left = s.x + 'px';
-  titleCard.style.top = (s.y - 40) + 'px';
-  titleCardTitle.textContent = (node.data.title || '').toUpperCase();
-  titleCardSubtitle.textContent = (node.data.description || '').slice(0, 80);
+  titleCard.style.top = (s.y - 46) + 'px';
+  cardIcon.textContent = '★'; // placeholder icon (replace later)
+  titleCardTitle.textContent = (node.data.title||'').toUpperCase();
+  titleCardSubtitle.textContent = (node.data.description||'').slice(0,80);
   titleCard.classList.add('show');
 }
 function showTitleAtPoint(wx, wy, title, sub='') {
   const s = worldToScreen(wx, wy);
   titleCard.style.left = s.x + 'px';
-  titleCard.style.top = (s.y - 40) + 'px';
+  titleCard.style.top = (s.y - 46) + 'px';
+  cardIcon.textContent = '★';
   titleCardTitle.textContent = title || '';
   titleCardSubtitle.textContent = sub || '';
   titleCard.classList.add('show');
 }
 function hideTitle() { titleCard.classList.remove('show'); }
 
-/* ------------- Detail panel ------------- */
+/* Detail panel */
 let currentDetail = null;
 function openDetail(h) {
   const a = layout.planets[h.planet].tiers[h.tier].achievements[h.ach];
@@ -354,128 +382,204 @@ function hideDetail() { detailPanel.classList.remove('show'); currentDetail = nu
 function completeAchievement(detail) {
   try {
     const a = achievements.planets[detail.planet].tiers[detail.tier].achievements[detail.ach];
-    a.status = 'completed'; a.dateCompleted = (new Date()).toISOString();
-    localStorage.setItem('progress', JSON.stringify(achievements));
-  } catch(e) { console.warn('complete failed', e); }
+    if (a) { a.status = 'completed'; a.dateCompleted = (new Date()).toISOString(); localStorage.setItem('progress', JSON.stringify(achievements)); }
+  } catch (e) { console.warn('complete failed', e); }
 }
 
-/* ------------- Zoom helpers ------------- */
-function zoomToPlanet(index) {
-  const p = layout.planets[index];
-  const screenMin = Math.min(W,H);
-  const requiredScale = (screenMin * CONFIG.ZOOM_FILL_PERCENT) / CONFIG.CORE_PLANET_VISUAL;
-  targetCam.x = -p.x; targetCam.y = -p.y; targetCam.scale = requiredScale * 1.05; // small boost
-  focused.planet = index; focused.tier = null;
+/* Lock / zoom helpers */
+function lockToPlanet(idx) {
+  lockedPlanet = idx;
+  const p = layout.planets[idx];
+  targetCam.x = -p.x; targetCam.y = -p.y;
+}
+function unlockCamera() {
+  lockedPlanet = null;
+}
+function zoomToPlanet(idx) {
+  const p = layout.planets[idx];
+  const smin = Math.min(W, H);
+  const req = (smin * CONFIG.ZOOM_FILL_PCT) / CONFIG.CORE_VISUAL;
+  targetCam.x = -p.x; targetCam.y = -p.y; targetCam.scale = req * 1.02;
+  focused.planet = idx; focused.tier = null;
   hideDetail(); hideTitle();
 }
-function zoomToTier(pIndex, tIndex) {
-  const t = layout.planets[pIndex].tiers[tIndex];
-  const screenMin = Math.min(W,H);
-  const requiredScale = (screenMin * CONFIG.ZOOM_FILL_PERCENT) / (CONFIG.TIER_VISUAL * 1.6);
-  targetCam.x = -t.x; targetCam.y = -t.y; targetCam.scale = requiredScale * 1.2;
-  focused.planet = pIndex; focused.tier = tIndex;
+function zoomToTier(pidx, tidx) {
+  const t = layout.planets[pidx].tiers[tidx];
+  const smin = Math.min(W,H);
+  const req = (smin * CONFIG.ZOOM_FILL_PCT) / (CONFIG.TIER_VISUAL * 1.6);
+  targetCam.x = -t.x; targetCam.y = -t.y; targetCam.scale = req * 1.08;
+  focused.planet = pidx; focused.tier = tidx;
   hideDetail(); hideTitle();
 }
-function resetView() { targetCam.x = 0; targetCam.y = 0; targetCam.scale = CONFIG.INITIAL_SCALE; focused.planet = null; focused.tier = null; hideDetail(); hideTitle(); }
+function resetView() {
+  targetCam.x = 0; targetCam.y = 0; targetCam.scale = CONFIG.INITIAL_SCALE;
+  focused.planet = null; focused.tier = null;
+  lockedPlanet = null;
+  hideDetail(); hideTitle();
+}
 
-/* ------------- Drawing utilities ------------- */
+/* Utility helpers */
 function lerp(a,b,t){ return a + (b-a) * t; }
 function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
 function dist(x1,y1,x2,y2){ return Math.hypot(x1-x2, y1-y2); }
 
-function drawGlowingConnector(x1,y1,x2,y2, accent, prog) {
-  // faint stroke
-  ctx.save(); ctx.globalAlpha = 0.08; ctx.strokeStyle = accent; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); ctx.restore();
-  // glow stroke
-  ctx.save(); ctx.lineWidth = 2.8; ctx.strokeStyle = accent; ctx.shadowBlur = 10; ctx.shadowColor = accent; ctx.globalAlpha = 0.12; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); ctx.restore();
-  // pulse
-  const px = x1 + (x2 - x1) * prog, py = y1 + (y2 - y1) * prog;
-  ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = accent; ctx.shadowBlur = 18; ctx.shadowColor = accent; ctx.globalAlpha = 0.92; ctx.beginPath(); ctx.arc(px, py, 6 + Math.sin(perfTime*6)*1.2, 0, Math.PI*2); ctx.fill(); ctx.restore();
+/* ---------- Glowing connector (no pulses) ----------
+   Draws a smooth curved path (quadratic) from A->B and paints a gradient
+   that gets brighter toward destination. Performance: gradient computed using screen coords,
+   stroke applied with multiple passes for a soft glow effect.
+*/
+function controlPointFor(x1,y1,x2,y2, strength = 0.24) {
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+  const dx = x2 - x1, dy = y2 - y1;
+  const distn = Math.hypot(dx,dy);
+  const px = -dy / (distn || 1), py = dx / (distn || 1);
+  const offset = Math.min(distn * strength, 280);
+  return { x: mx + px * offset, y: my + py * offset };
+}
+function drawGlowingPath(x1,y1,x2,y2, accent) {
+  // convert world coords to screen coords for gradient calculation
+  const s1 = worldToScreen(x1,y1);
+  const s2 = worldToScreen(x2,y2);
+  // compute control point in world space, then map to screen
+  const cpw = controlPointFor(x1,y1,x2,y2, 0.22);
+  const cp = worldToScreen(cpw.x, cpw.y);
+  // gradient from source to dest (brighter near dest)
+  const g = ctx.createLinearGradient(s1.x, s1.y, s2.x, s2.y);
+  // more transparent near source, brighter near destination
+  g.addColorStop(0, hexWithAlpha(accent, 0.06));
+  g.addColorStop(0.6, hexWithAlpha(accent, 0.35));
+  g.addColorStop(1, hexWithAlpha('#ffffff', 0.9));
+
+  // draw thick blur layers (cheap glow)
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  // draw outer glow (soft)
+  ctx.globalAlpha = 0.12;
+  ctx.strokeStyle = g;
+  ctx.lineWidth = CONFIG.GLOW_THICKNESS * 8 * camera.scale / 3;
+  ctx.shadowBlur = 24;
+  ctx.shadowColor = accent;
+  ctx.beginPath();
+  ctx.moveTo(s1.x, s1.y);
+  ctx.quadraticCurveTo(cp.x, cp.y, s2.x, s2.y);
+  ctx.stroke();
+  ctx.restore();
+
+  // draw mid glow
+  ctx.save();
+  ctx.globalAlpha = 0.25;
+  ctx.strokeStyle = g;
+  ctx.lineWidth = CONFIG.GLOW_THICKNESS * 3;
+  ctx.beginPath();
+  ctx.moveTo(s1.x, s1.y);
+  ctx.quadraticCurveTo(cp.x, cp.y, s2.x, s2.y);
+  ctx.stroke();
+  ctx.restore();
+
+  // crisp core line
+  ctx.save();
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = g;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(s1.x, s1.y);
+  ctx.quadraticCurveTo(cp.x, cp.y, s2.x, s2.y);
+  ctx.stroke();
+  ctx.restore();
 }
 
-let perfTime = 0;
+/* helper: convert hex color to rgba string with alpha */
+function hexWithAlpha(hex, alpha) {
+  // accept #rrggbb or rgba pass-through
+  if (hex.startsWith('rgba') || hex.startsWith('rgb')) return hex.replace('rgb','rgba').replace(')',`, ${alpha})`);
+  const h = hex.replace('#','');
+  const r = parseInt(h.substring(0,2),16);
+  const g = parseInt(h.substring(2,4),16);
+  const b = parseInt(h.substring(4,6),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 
-/* ------------- Main draw loop ------------- */
-let animTime = 0;
+/* ---------- Main render loop ---------- */
+let anim = 0;
 function draw() {
-  animTime += 1/60;
-  perfTime = animTime;
-  // smooth camera
+  anim += 1/60;
+  // camera smoothing
   camera.x = lerp(camera.x, targetCam.x, easing);
   camera.y = lerp(camera.y, targetCam.y, easing);
   camera.scale = lerp(camera.scale, targetCam.scale, easing);
 
-  // background
+  // if lockedPlanet is set, keep targetCam centered to it (enforce)
+  if (lockedPlanet !== null) {
+    const p = layout.planets[lockedPlanet];
+    targetCam.x = -p.x; targetCam.y = -p.y;
+  }
+
+  // draw background (cached star + orbit)
   ctx.clearRect(0,0,W,H);
   if (starCache) ctx.drawImage(starCache, 0, 0, W, H);
+  if (orbitCache) ctx.drawImage(orbitCache, 0, 0, W, H);
+
+  // draw vanishing center glow (subtle)
+  const centerAccent = getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#00c8ff';
+  ctx.save();
+  const cg = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.max(W,H) * 0.45);
+  cg.addColorStop(0, hexWithAlpha(centerAccent, 0.06));
+  cg.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = cg; ctx.fillRect(0,0,W,H);
+  ctx.restore();
 
   // world transform
   ctx.save();
   ctx.translate(W/2 + camera.x * camera.scale, H/2 + camera.y * camera.scale);
   ctx.scale(camera.scale, camera.scale);
 
-  // draw orbit cache (screen space)
-  if (orbitCache) {
-    ctx.setTransform(1,0,0,1,0,0);
-    ctx.drawImage(orbitCache, 0, 0, W*DPR, H*DPR, 0, 0, W, H);
-    ctx.setTransform(DPR,0,0,DPR,0,0);
-    ctx.translate(W/2 + camera.x * camera.scale, H/2 + camera.y * camera.scale);
-    ctx.scale(camera.scale, camera.scale);
-  }
-
-  // center image
-  if (IMG.center) ctx.drawImage(IMG.center, -130, -130, 260, 260);
-
   const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#00c8ff';
 
-  // planets & tiers
+  // iterate planets and draw connectors (glow), planets, tiers, nodes
   for (const p of layout.planets) {
-    // draw core planet (tier 0)
-    const coreSize = CONFIG.CORE_PLANET_VISUAL;
-    if (IMG.planet) ctx.drawImage(IMG.planet, p.x - coreSize/2, p.y - coreSize/2, coreSize, coreSize);
-    else { ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(p.x,p.y,coreSize/2,0,Math.PI*2); ctx.fill(); }
+    // draw core planet
+    if (IMG.planet) ctx.drawImage(IMG.planet, p.x - CONFIG.CORE_VISUAL/2, p.y - CONFIG.CORE_VISUAL/2, CONFIG.CORE_VISUAL, CONFIG.CORE_VISUAL);
+    else { ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(p.x,p.y, CONFIG.CORE_VISUAL/2, 0, Math.PI*2); ctx.fill(); }
 
-    // label
-    ctx.save(); ctx.fillStyle = '#fff'; ctx.font='bold 14px Electrolize, Arial'; ctx.textAlign = 'center'; ctx.fillText((p.data.planetName||'').toUpperCase(), p.x, p.y + coreSize/2 + 18 / camera.scale); ctx.restore();
+    // planet label
+    ctx.save(); ctx.fillStyle = '#fff'; ctx.font = 'bold 14px Electrolize, Arial'; ctx.textAlign = 'center';
+    ctx.fillText((p.data.planetName||'').toUpperCase(), p.x, p.y + CONFIG.CORE_VISUAL/2 + 18 / camera.scale); ctx.restore();
 
-    // tiers connectors + pulses + tier planet draw
+    // draw tiers and connectors
     for (const t of p.tiers) {
-      // connector progress
-      const prog = (animTime * (CONFIG.PULSE_SPEED + (t.index * 0.02))) % 1;
-      drawGlowingConnector(p.x, p.y, t.x, t.y, accent, prog);
+      // draw glowing path from p->t using gradient brighter toward t
+      drawGlowingPath(p.x, p.y, t.x, t.y, accent);
 
-      // draw tier planet (choose tier image if available)
-      const tierSize = CONFIG.TIER_VISUAL;
-      const tierKey = t.index === 0 ? 'planet' : `tier${Math.min(5, t.index+1)}`; // tier2..tier5 keys
-      if (t.index === 0 && IMG.planet) ctx.drawImage(IMG.planet, t.x - tierSize/2, t.y - tierSize/2, tierSize, tierSize);
-      else if (IMG[tierKey]) ctx.drawImage(IMG[tierKey], t.x - tierSize/2, t.y - tierSize/2, tierSize, tierSize);
-      else if (IMG.planet) ctx.drawImage(IMG.planet, t.x - tierSize/2, t.y - tierSize/2, tierSize, tierSize);
-      else { ctx.fillStyle='#333'; ctx.beginPath(); ctx.arc(t.x,t.y,tierSize/2,0,Math.PI*2); ctx.fill(); }
+      // draw tier planet
+      const size = CONFIG.TIER_VISUAL;
+      const tierKey = t.index === 0 ? 'planet' : `tier${Math.min(5, t.index+1)}`;
+      if (t.index === 0 && IMG.planet) ctx.drawImage(IMG.planet, t.x - size/2, t.y - size/2, size, size);
+      else if (IMG[tierKey]) ctx.drawImage(IMG[tierKey], t.x - size/2, t.y - size/2, size, size);
+      else if (IMG.planet) ctx.drawImage(IMG.planet, t.x - size/2, t.y - size/2, size, size);
+      else { ctx.fillStyle='#333'; ctx.beginPath(); ctx.arc(t.x,t.y,size/2,0,Math.PI*2); ctx.fill(); }
 
-      // junction always visible (floating)
+      // junction (floating)
       const jx = t.x + (t.x - p.x) * 0.12;
       const jy = t.y + (t.y - p.y) * 0.12;
       drawAtlas('junction', jx, jy, 20, 1);
 
       // tier label
-      ctx.save(); ctx.fillStyle = '#fff'; ctx.font='11px Electrolize, Arial'; ctx.textAlign='center'; ctx.fillText((t.data.tierName||`Tier ${t.index+1}`).toUpperCase(), t.x, t.y - tierSize/2 - 8); ctx.restore();
+      ctx.save(); ctx.fillStyle = '#fff'; ctx.font='11px Electrolize, Arial'; ctx.textAlign='center';
+      ctx.fillText((t.data.tierName||`Tier ${t.index+1}`).toUpperCase(), t.x, t.y - size/2 - 8); ctx.restore();
 
-      // nodes drawn ON planet surface: hologram (under), node icon (on top), label nearby
-      for (let ni=0; ni<t.achievements.length; ni++){
+      // nodes ON surface: draw hologram under node then icon and label
+      for (let ni=0; ni<t.achievements.length; ni++) {
         const node = t.achievements[ni];
-        // draw hologram under node with alpha
-        drawAtlas('hologram', node._pos.x, node._pos.y, Math.max(36, node._pos.r*2.4), node._hover || 0);
-
+        // hologram under node: alpha = node._hover
+        drawAtlas('hologram', node._pos.x, node._pos.y, Math.max(36, node._pos.r * 2.4), node._hover || 0);
         // node icon
-        const key = (node.data.status === 'locked') ? 'lock' : 'node';
+        const key = node.data.status === 'locked' ? 'lock' : 'node';
         drawAtlas(key, node._pos.x, node._pos.y, CONFIG.NODE_ICON, 1);
-
-        // label (if zoomed enough or always show small)
-        const showLabel = camera.scale > 1.1 || (window.innerWidth > 700);
-        if (showLabel) {
+        // label (visible on larger zooms)
+        if (camera.scale > 1.05 || window.innerWidth > 700) {
           ctx.save(); ctx.fillStyle = '#fff'; ctx.font = '11px Electrolize, Arial'; ctx.textAlign = 'left';
-          ctx.fillText((node.data.title||'').toUpperCase(), node._pos.x + CONFIG.NODE_LABEL_OFFSET, node._pos.y + 4);
-          ctx.restore();
+          ctx.fillText((node.data.title||'').toUpperCase(), node._pos.x + CONFIG.NODE_LABEL_OFFSET, node._pos.y + 4); ctx.restore();
         }
       }
     }
@@ -483,20 +587,28 @@ function draw() {
 
   ctx.restore();
 
-  // hologram hover alpha transitions
+  // update hover alpha transitions
   for (const p of layout.planets) for (const t of p.tiers) for (const a of t.achievements) {
     const target = (hovered && hovered.type === 'achievement' && hovered.planet === p.index && hovered.tier === t.index && hovered.ach === t.achievements.indexOf(a)) ? 1 : 0;
     a._hover = lerp(a._hover || 0, target, 0.14);
   }
 
+  // if zoomed-in beyond threshold and not locked, optionally auto-lock to nearest planet (optional)
+  // we won't auto-lock; clicking locks. But unlock condition:
+  if (lockedPlanet !== null && targetCam.scale < CONFIG.UNLOCK_SCALE_THRESHOLD) {
+    lockedPlanet = null;
+    // recenter to origin
+    targetCam.x = 0; targetCam.y = 0;
+  }
+
   requestAnimationFrame(draw);
 }
 
-/* ------------- Init (load assets, build caches, layout) ------------- */
+/* ---------- Init flow ---------- */
 async function init() {
   document.documentElement.style.setProperty('--accent', (themeColorEl?.value) || '#00c8ff');
 
-  // preload images used often
+  // preload visual assets used often
   IMG.center = await loadImage(ASSETS.center);
   IMG.planet = await loadImage(ASSETS.planet);
   IMG.planethover = await loadImage(ASSETS.planethover);
@@ -505,30 +617,19 @@ async function init() {
   IMG.tier4 = await loadImage(ASSETS.tier4);
   IMG.tier5 = await loadImage(ASSETS.tier5);
 
-  // build small atlas for icons/hologram
   await buildAtlas();
-
-  // caches
   buildStarCache();
-  buildOrbitCache(Math.max(W, H) * 0.95);
-
-  // data and layout
+  buildOrbitCache(Math.max(W,H) * 0.95);
   await loadData();
   buildLayout();
 
-  // initial camera
   camera.x = targetCam.x = 0; camera.y = targetCam.y = 0; camera.scale = targetCam.scale = CONFIG.INITIAL_SCALE;
 
-  // start draw
   requestAnimationFrame(draw);
 }
-init().catch(e => console.error('Init error', e));
+init().catch(e => console.error('Init failed', e));
 
-/* ------------- Utilities & admin helpers ------------- */
-function lerp(a,b,t){ return a + (b-a) * t; }
-function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
-function dist(a,b,c,d){ return Math.hypot(a-c, b-d); }
-
+/* ---------- Small admin helpers (kept) ---------- */
 window.loginAdmin = function() {
   const pass = document.getElementById('adminPassword')?.value;
   if (pass === 'admin') {
@@ -553,4 +654,4 @@ window.downloadJson = ()=>{ const blob = new Blob([JSON.stringify(achievements,n
 window.bulkUnlock = ()=>{ achievements.planets.forEach(p=>p.tiers.forEach(t=>t.achievements.forEach(a=>a.status='available'))); localStorage.setItem('progress', JSON.stringify(achievements)); alert('All unlocked'); };
 window.bulkReset = ()=>{ achievements.planets.forEach(p=>p.tiers.forEach((t,j)=>t.achievements.forEach(a=>{ a.status = j===0? 'available':'locked'; a.dateCompleted = null; }))); localStorage.setItem('progress', JSON.stringify(achievements)); alert('All reset'); };
 
-/* End of file */
+/* End of script.js */
