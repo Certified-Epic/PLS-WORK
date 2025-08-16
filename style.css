@@ -2,7 +2,7 @@
   --bg:#000;
   --fg:#e7eef6;
   --accent:#00c8ff;
-  --card-bg: rgba(18,20,22,0.98);
+  --card-bg: rgba(28,30,34,0.96);
   --font-main: 'Electrolize', Arial, sans-serif;
 }
 
@@ -21,24 +21,24 @@ canvas{display:block;width:100vw;height:100vh}
 .controls{display:flex;gap:10px;align-items:center}
 .controls label{font-size:13px;display:flex;gap:6px;align-items:center}
 
-/* title card (minecraft-style) */
+/* title card (minecraft-like) */
 .title-card{
   position:fixed; left:0; top:0; z-index:220; pointer-events:none;
-  display:flex; gap:10px; align-items:center; padding:8px; border-radius:6px;
+  display:flex; gap:10px; align-items:center; padding:10px; border-radius:6px;
   background: var(--card-bg); border: 2px solid rgba(255,255,255,0.06);
-  transform-origin:left top; opacity:0; transform: translate(-50%,-130%) scale(.98);
+  transform-origin:left top; opacity:0; transform: translate(-50%,-140%) scale(.98);
   transition:opacity .18s ease, transform .18s ease;
-  width: min(360px, 86vw);
+  width: min(440px, 88vw);
 }
-.title-card.show{opacity:1; transform: translate(-50%,-140%) scale(1)}
+.title-card.show{opacity:1; transform: translate(-50%,-150%) scale(1)}
 .card-icon{
-  width:46px; height:46px; background:linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
-  border-radius:4px; border:1px solid rgba(255,255,255,0.04);
-  display:flex;align-items:center;justify-content:center;color:var(--accent); font-weight:700;
+  width:56px; height:56px; background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+  border-radius:6px; border:1px solid rgba(255,255,255,0.04);
+  display:flex;align-items:center;justify-content:center;color:var(--accent); font-weight:900; font-size:20px;
 }
 .card-text{flex:1}
-.card-title{font-size:14px;color:var(--accent);font-weight:700}
-.card-sub{font-size:12px;opacity:.9;margin-top:6px}
+.card-title{font-size:15px;color:var(--accent);font-weight:800}
+.card-sub{font-size:13px;opacity:.92;margin-top:6px}
 
 /* detail panel */
 .detail-panel{
@@ -46,7 +46,7 @@ canvas{display:block;width:100vw;height:100vh}
   transition:opacity .22s ease, transform .22s cubic-bezier(.2,.9,.22,1)
 }
 .detail-panel.show{opacity:1;pointer-events:auto;transform:translate(-50%,-50%) scale(1)}
-.detail-inner{width:min(720px, 92vw);background:linear-gradient(180deg, rgba(0,0,0,0.96), rgba(0,0,0,0.9));padding:18px;border-radius:12px;border:1px solid rgba(255,255,255,0.04);box-shadow:0 30px 80px rgba(0,0,0,0.7)}
+.detail-inner{width:min(720px, 92vw);background:linear-gradient(180deg, rgba(6,8,10,0.98), rgba(12,14,16,0.95));padding:18px;border-radius:12px;border:1px solid rgba(255,255,255,0.04);box-shadow:0 30px 80px rgba(0,0,0,0.7)}
 .detail-inner h2{margin:0 0 8px 0;font-size:20px}
 .detail-inner p{margin:0 0 12px 0;opacity:0.95}
 .detail-actions{display:flex;gap:10px}
@@ -54,7 +54,7 @@ canvas{display:block;width:100vw;height:100vh}
 /* admin panel */
 .admin-panel{position:fixed;left:18px;bottom:18px;background:rgba(0,0,0,0.85);padding:10px;border-radius:8px;color:var(--fg);z-index:240;border:1px solid rgba(255,255,255,0.04)}
 
-/* mobile */
+/* responsive */
 @media (max-width:720px){
   .controls{display:none}
   .title-card{display:none}
