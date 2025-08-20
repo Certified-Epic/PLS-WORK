@@ -1,697 +1,104 @@
-/* script.js — Fixes per user report
-   - Deterministic, spread-out planets & tiers (no straight-line overlap)
-   - Glowing connectors reworked and visible
-   - Junctions outside tiers, shown only when zoomed-in & hovered/focused
-   - Nodes not interactive unless visible (zoomed or focused)
-   - planethover only for the hovered planet
-   - Minimum zoom clamp at INITIAL_SCALE to prevent zooming out further
-   - Safe normalization of achievements data
-*/
+// script.js (clean foundation)
+(() => {
+  const canvas = document.getElementById('starChart');
+  const ctx = canvas.getContext('2d');
+  let W, H, DPR; function resize(){ DPR = Math.max(1, window.devicePixelRatio||1); W = canvas.clientWidth; H = canvas.clientHeight; canvas.width = Math.floor(W*DPR); canvas.height = Math.floor(H*DPR); ctx.setTransform(DPR,0,0,DPR,0,0); } window.addEventListener('resize', resize); resize();
 
-/* CONFIG */
-const CONFIG = {
-  PLANET_COUNT: 5,
-  TIERS_PER_PLANET: 5,           // include core as tier 0
-  CORE_RADIUS: 900,              // more spread
-  TIER_BASE_OFFSET: 220,
-  TIER_SPACING: 360,             // larger spacing to avoid overlap
-  CORE_VISUAL: 480,
-  TIER_VISUAL: 160,
-  NODE_ICON: 22,
-  NODE_LABEL_OFFSET: 32,
-  NODE_MIN_RF: 0.34,
-  NODE_MAX_RF: 0.80,
-  ZOOM_FILL_PCT: 0.70,
-  INITIAL_SCALE: 0.35,           // user can't zoom out past this
-  NODE_SHOW_SCALE: 1.05,         // nodes appear when zoomed this much or focused
-  STAR_COUNT: 160,
-  GLOW_THICKNESS: 3,
-  UNLOCK_SCALE_THRESHOLD: 1.05  // unlock when zoom out below this
-};
+  // UI
+  const adminBtn = document.getElementById('adminBtn'), adminPanel = document.getElementById('adminPanel'), jsonEditor = document.getElementById('jsonEditor');
+  const reloadBtn = document.getElementById('reloadBtn'), saveBtn = document.getElementById('saveBtn');
+  const lineModeBtn = document.getElementById('lineModeBtn'), dragModeBtn = document.getElementById('dragModeBtn'), downloadBtn = document.getElementById('downloadBtn');
+  const titleCard = document.getElementById('titleCard'), tcTitle = document.getElementById('tc-title'), tcSub = document.getElementById('tc-sub');
+  const detailCard = document.getElementById('detailCard'), detailTitle = document.getElementById('detailTitle'), detailDesc = document.getElementById('detailDesc'), detailRoadmap = document.getElementById('detailRoadmap'), detailTips = document.getElementById('detailTips');
 
-/* Canvas setup */
-const canvas = document.getElementById('starChart');
-const ctx = canvas.getContext('2d', { alpha: true });
-let DPR = Math.max(1, window.devicePixelRatio || 1);
-let W = 0, H = 0;
-function resize() {
-  DPR = Math.max(1, window.devicePixelRatio || 1);
-  W = window.innerWidth; H = window.innerHeight;
-  canvas.width = Math.floor(W * DPR);
-  canvas.height = Math.floor(H * DPR);
-  canvas.style.width = W + 'px';
-  canvas.style.height = H + 'px';
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-}
-window.addEventListener('resize', resize);
-resize();
+  // Data
+  let ACH = null, CONN = null, ASSETS = 'assets/';
+  const CONFIG = { CORE_COUNT:5, CORE_RADIUS:420, CORE_SIZE:140, TIER_STEP:140, ZOOM_INIT:0.38 };
 
-/* UI refs */
-const themeColorEl = document.getElementById('themeColor');
-const monoToggle = document.getElementById('monoToggle');
-const debugToggle = document.getElementById('debugToggle');
-const resetBtn = document.getElementById('resetView');
+  // Camera
+  let cam = { x:0, y:0, scale: CONFIG.ZOOM_INIT }, targetCam = {...cam}, easing = 0.14;
+  let focused = { core:null, tier:null }, hover=null;
+  let adminMode=false, lineMode=false, dragMode=false, pendingLine=null, dragTarget=null;
 
-const titleCard = document.getElementById('titleCard');
-const cardIcon = document.getElementById('cardIcon');
-const titleCardTitle = document.getElementById('titleCardTitle');
-const titleCardSubtitle = document.getElementById('titleCardSubtitle');
+  async function loadFiles(){ ACH = await fetch('achievements.json').then(r=>r.json()).catch(()=>({planets:[]})); CONN = await fetch('connections.json').then(r=>r.json()).catch(()=>([])); normalize(); jsonEditor.value = JSON.stringify(ACH,null,2); }
+  function normalize(){ if(!ACH.planets) ACH.planets=[]; const coreNames=['Physical','Cerebral','Creative','Social','Moral']; for(let i=0;i<CONFIG.CORE_COUNT;i++){ if(!ACH.planets[i]) ACH.planets[i]={id:'core_'+(i+1),name:coreNames[i],x:null,y:null,size:CONFIG.CORE_SIZE,tiers:[]}; const core=ACH.planets[i]; const angle=i*(Math.PI*2/CONFIG.CORE_COUNT)-Math.PI/2; if(core.x===null) core.x=Math.cos(angle)*CONFIG.CORE_RADIUS; if(core.y===null) core.y=Math.sin(angle)*CONFIG.CORE_RADIUS; for(let t=0;t<5;t++){ if(!core.tiers[t]) core.tiers[t]={id:core.id+'_t'+(t+1),name:'T'+(t+1),orbit:(core.size/2)+(t+1)*CONFIG.TIER_STEP,angle:angle+(t*0.12),size:96,description:'',nodes:[]}; const tier=core.tiers[t]; tier.x=core.x+Math.cos(tier.angle)*tier.orbit; tier.y=core.y+Math.sin(tier.angle)*tier.orbit; } } }
 
-const detailPanel = document.getElementById('detailPanel');
-const detailTitle = document.getElementById('detailTitle');
-const detailDesc = document.getElementById('detailDesc');
-const detailClose = document.getElementById('detailClose');
-const completeBtn = document.getElementById('completeBtn');
+  // caches
+  let starCache=null, orbitCache=null;
+  function buildCaches(){ starCache=document.createElement('canvas'); starCache.width=Math.floor(W*DPR); starCache.height=Math.floor(H*DPR); const sctx=starCache.getContext('2d'); sctx.scale(DPR,DPR); sctx.fillStyle='#000'; sctx.fillRect(0,0,W,H); for(let i=0;i<240;i++){ sctx.fillStyle='rgba(255,255,255,'+(0.1+Math.random()*0.9)+')'; sctx.fillRect(Math.random()*W,Math.random()*H,Math.random()*1.8+0.2,Math.random()*1.8+0.2); } orbitCache=document.createElement('canvas'); orbitCache.width=Math.floor(W*DPR); orbitCache.height=Math.floor(H*DPR); const octx=orbitCache.getContext('2d'); octx.scale(DPR,DPR); octx.clearRect(0,0,W,H); const rings=[220,360,520,700,900]; for(let r of rings){ octx.beginPath(); octx.strokeStyle='rgba(255,255,255,0.03)'; octx.lineWidth=1; octx.arc(W/2,H/2,r,0,Math.PI*2); octx.stroke(); } }
 
-themeColorEl?.addEventListener('input', e => document.documentElement.style.setProperty('--accent', e.target.value));
-monoToggle?.addEventListener('change', e => document.documentElement.style.setProperty('--mono', e.target.checked ? 1 : 0));
-resetBtn?.addEventListener('click', () => resetView());
-detailClose?.addEventListener('click', () => hideDetail());
-completeBtn?.addEventListener('click', () => { if (currentDetail) completeAchievement(currentDetail); hideDetail(); });
+  function worldToScreen(wx,wy){ const cx=W/2 + cam.x*cam.scale, cy=H/2 + cam.y*cam.scale; return { x: cx + wx*cam.scale, y: cy + wy*cam.scale }; }
+  function screenToWorld(sx,sy){ const cx=W/2 + cam.x*cam.scale, cy=H/2 + cam.y*cam.scale; return { x: (sx-cx)/cam.scale, y: (sy-cy)/cam.scale }; }
+  function lerp(a,b,t){return a+(b-a)*t} function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
 
-/* Assets (images) and atlas */
-const ASSETS = {
-  center: 'assets/center.png',
-  planet: 'assets/planet.png',
-  planethover: 'assets/planethover.png',
-  tier2: 'assets/tier2.png',
-  tier3: 'assets/tier3.png',
-  tier4: 'assets/tier4.png',
-  tier5: 'assets/tier5.png',
-  node: 'assets/node.png',
-  lock: 'assets/lock.png',
-  pulse: 'assets/pulse.png',
-  junction: 'assets/junction.png',
-  hologram: 'assets/achievementnodehologram.png',
-  completedTier: 'assets/completedplanettier.png'
-};
-const IMG = {};
-const atlas = { canvas: null, ctx: null, map: {} };
-
-function loadImage(src) {
-  return new Promise(resolve => {
-    const img = new Image();
-    img.src = src;
-    img.onload = () => resolve(img);
-    img.onerror = () => { console.warn('Image failed to load:', src); resolve(null); };
-  });
-}
-
-async function buildAtlas() {
-  const keys = ['node','lock','pulse','junction','hologram','completedTier'];
-  const imgs = await Promise.all(keys.map(k => loadImage(ASSETS[k])));
-  const cell = 128, cols = 3;
-  atlas.canvas = document.createElement('canvas');
-  atlas.canvas.width = cell * cols;
-  atlas.canvas.height = cell * Math.ceil(keys.length / cols);
-  atlas.ctx = atlas.canvas.getContext('2d');
-  keys.forEach((k,i) => {
-    const col = i % cols, row = Math.floor(i / cols);
-    const x = col * cell, y = row * cell;
-    if (imgs[i]) atlas.ctx.drawImage(imgs[i], x, y, cell, cell);
-    atlas.map[k] = { x, y, w: cell, h: cell, ok: !!imgs[i] };
-  });
-}
-function drawAtlas(key, x, y, size, alpha = 1) {
-  const meta = atlas.map[key];
-  if (!atlas.canvas || !meta) {
-    ctx.save(); ctx.globalAlpha = alpha; ctx.beginPath(); ctx.fillStyle = '#fff'; ctx.arc(x,y,size/2,0,Math.PI*2); ctx.fill(); ctx.restore();
-    return;
+  function drawGlowLine(sx,sy,tx,ty,opts={style:'curved'}){
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent')||'#00ffc3';
+    const accent2 = getComputedStyle(document.documentElement).getPropertyValue('--accent2')||'#00aaff';
+    ctx.save();
+    const grad = ctx.createLinearGradient(sx,sy,tx,ty);
+    grad.addColorStop(0, 'rgba(0,0,0,0.06)'); grad.addColorStop(0.6, accent); grad.addColorStop(1, accent2);
+    ctx.lineCap='round'; ctx.lineJoin='round';
+    ctx.globalAlpha=0.12; ctx.strokeStyle=grad; ctx.lineWidth=10; ctx.beginPath();
+    if(opts.style==='curved'){ const cp = controlPoint(sx,sy,tx,ty,0.22); ctx.moveTo(sx,sy); ctx.quadraticCurveTo(cp.x,cp.y,tx,ty); } else { ctx.moveTo(sx,sy); ctx.lineTo(tx,ty); }
+    ctx.stroke();
+    ctx.globalAlpha=0.4; ctx.lineWidth=4; ctx.beginPath();
+    if(opts.style==='curved'){ const cp = controlPoint(sx,sy,tx,ty,0.18); ctx.moveTo(sx,sy); ctx.quadraticCurveTo(cp.x,cp.y,tx,ty); } else { ctx.moveTo(sx,sy); ctx.lineTo(tx,ty); }
+    ctx.stroke();
+    ctx.globalAlpha=1; ctx.lineWidth=1.2; ctx.beginPath();
+    if(opts.style==='curved'){ const cp = controlPoint(sx,sy,tx,ty,0.18); ctx.moveTo(sx,sy); ctx.quadraticCurveTo(cp.x,cp.y,tx,ty); } else { ctx.moveTo(sx,sy); ctx.lineTo(tx,ty); }
+    ctx.stroke();
+    // bright spot
+    const t = (performance.now()/1200) % 1; let bx,by; if(opts.style==='curved'){ const cp=controlPoint(sx,sy,tx,ty,0.18); const qx = (1-t)*(1-t)*sx + 2*(1-t)*t*cp.x + t*t*tx; const qy = (1-t)*(1-t)*sy + 2*(1-t)*t*cp.y + t*t*ty; bx=qx; by=qy; } else { bx = sx + (tx-sx)*t; by = sy + (ty-sy)*t; }
+    ctx.globalCompositeOperation='lighter'; const g = ctx.createRadialGradient(bx,by,0,bx,by,18); g.addColorStop(0, accent2); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(bx,by,18,0,Math.PI*2); ctx.fill(); ctx.globalCompositeOperation='source-over';
+    ctx.restore();
   }
-  ctx.save(); ctx.globalAlpha = alpha;
-  ctx.drawImage(atlas.canvas, meta.x, meta.y, meta.w, meta.h, x - size/2, y - size/2, size, size);
-  ctx.restore();
-}
+  function controlPoint(x1,y1,x2,y2,str=0.22){ const mx=(x1+x2)/2,my=(y1+y2)/2; const dx=x2-x1, dy=y2-y1; const d=Math.hypot(dx,dy)||1; const px=-dy/d, py=dx/d; const off=Math.min(d*str,420); return { x: mx + px*off, y: my + py*off }; }
 
-/* background caches */
-let starCache = null;
-function buildStarCache() {
-  starCache = document.createElement('canvas');
-  starCache.width = Math.floor(W * DPR);
-  starCache.height = Math.floor(H * DPR);
-  const s = starCache.getContext('2d'); s.scale(DPR, DPR);
-  s.fillStyle = '#000'; s.fillRect(0,0,W,H);
-  for (let i=0;i<CONFIG.STAR_COUNT;i++){
-    const x = Math.random()*W, y = Math.random()*H, r = Math.random()*1.6+0.2;
-    s.fillStyle = `rgba(255,255,255,${0.18 + Math.random()*0.7})`;
-    s.fillRect(x,y,r,r);
-  }
-}
-let orbitCache = null;
-function buildOrbitCache(maxR) {
-  orbitCache = document.createElement('canvas');
-  orbitCache.width = Math.floor(W * DPR);
-  orbitCache.height = Math.floor(H * DPR);
-  const oc = orbitCache.getContext('2d'); oc.scale(DPR, DPR);
-  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#00c8ff';
-  oc.strokeStyle = accent; oc.globalAlpha = 0.06; oc.lineWidth = 1;
-  for (let r = 150; r < maxR; r += CONFIG.TIER_SPACING/2) {
-    oc.beginPath(); oc.arc(W/2, H/2, r, 0, Math.PI*2); oc.stroke();
-  }
-  // vanishing subtle glow
-  const g = oc.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.max(W,H)/1.8);
-  g.addColorStop(0, 'rgba(255,255,255,0.06)');
-  g.addColorStop(1, 'rgba(255,255,255,0)');
-  oc.fillStyle = g; oc.beginPath(); oc.arc(W/2, H/2, Math.max(W,H)/1.8, 0, Math.PI*2); oc.fill();
-}
-
-/* data load & normalization */
-let achievements = { planets: [] };
-function makeEmptyAchievement(pi, ti, ai) {
-  return { title: `ACH ${pi+1}-${ti+1}-${ai+1}`, description: `How to get ACH ${pi+1}-${ti+1}-${ai+1}`, status: (ti===0?'available':'locked'), dateCompleted: null };
-}
-function normalizeAchievements() {
-  if (!achievements) achievements = {};
-  if (!Array.isArray(achievements.planets)) achievements.planets = [];
-  for (let i=0;i<CONFIG.PLANET_COUNT;i++){
-    if (!achievements.planets[i]) achievements.planets[i] = { planetName: `Planet ${i+1}`, tiers: [] };
-    const p = achievements.planets[i];
-    if (!Array.isArray(p.tiers)) p.tiers = [];
-    for (let t=0;t<CONFIG.TIERS_PER_PLANET;t++){
-      if (!p.tiers[t]) p.tiers[t] = { tierName: `Tier ${t+1}`, achievements: [] };
-      const tier = p.tiers[t];
-      if (!Array.isArray(tier.achievements)) tier.achievements = [];
-      if (tier.achievements.length === 0) {
-        for (let a=0;a<6;a++) tier.achievements.push(makeEmptyAchievement(i,t,a));
-      } else {
-        for (let a=0;a<tier.achievements.length;a++){
-          const ach = tier.achievements[a] || {};
-          if (typeof ach.title !== 'string') ach.title = `ACH ${i+1}-${t+1}-${a+1}`;
-          if (typeof ach.description !== 'string') ach.description = '';
-          if (!['locked','available','completed'].includes(ach.status)) ach.status = (t===0?'available':'locked');
-          if (!('dateCompleted' in ach)) ach.dateCompleted = null;
-          tier.achievements[a] = ach;
+  // main draw loop
+  let last = performance.now();
+  function draw(now){
+    const dt = now - last; last = now;
+    cam.x = lerp(cam.x, targetCam.x, 0.12); cam.y = lerp(cam.y, targetCam.y, 0.12); cam.scale = lerp(cam.scale, targetCam.scale, 0.12);
+    ctx.clearRect(0,0,W,H); if(starCache) ctx.drawImage(starCache,0,0,W,H); if(orbitCache) ctx.drawImage(orbitCache,0,0,W,H);
+    ctx.save(); ctx.translate(W/2 + cam.x*cam.scale, H/2 + cam.y*cam.scale); ctx.scale(cam.scale, cam.scale);
+    ACH.planets.forEach((core,ci)=>{
+      ctx.save(); ctx.fillStyle='#0f1720'; ctx.beginPath(); ctx.arc(core.x,core.y,core.size/2,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.stroke(); ctx.restore();
+      core.tiers.forEach((tier,ti)=>{
+        tier.x = core.x + Math.cos(tier.angle)*tier.orbit; tier.y = core.y + Math.sin(tier.angle)*tier.orbit;
+        const sp = worldToScreen(core.x,core.y), tp = worldToScreen(tier.x,tier.y);
+        drawGlowLine(sp.x,sp.y,tp.x,tp.y,{style:'curved'});
+        ctx.save(); ctx.fillStyle='#11131a'; ctx.beginPath(); ctx.arc(tier.x,tier.y,tier.size/2,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.stroke(); ctx.restore();
+        const showNodes = cam.scale >= 1.1 && focused.core===ci;
+        if(showNodes){
+          tier.nodes.forEach((node,ni)=>{ const nx = tier.x + Math.cos(node.angle)*node.rad, ny = tier.y + Math.sin(node.angle)*node.rad; if(hover && hover.type==='node' && hover.core===ci && hover.tier===ti && hover.node===ni){ ctx.save(); ctx.globalAlpha=0.9; ctx.fillStyle='rgba(0,255,200,0.12)'; ctx.beginPath(); ctx.arc(nx,ny,18,0,Math.PI*2); ctx.fill(); ctx.restore(); } ctx.save(); ctx.fillStyle = node.status==='locked' ? 'rgba(255,255,255,0.25)' : '#fff'; ctx.beginPath(); ctx.arc(nx,ny,6,0,Math.PI*2); ctx.fill(); ctx.restore(); });
         }
-      }
-      p.tiers[t] = tier;
-    }
-    achievements.planets[i] = p;
-  }
-}
-async function loadData() {
-  try {
-    const res = await fetch('./achievements.json');
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    achievements = await res.json();
-  } catch (e) {
-    console.warn('No valid achievements.json, using demo data.', e);
-    achievements = { planets: [] };
-    for (let i=0;i<CONFIG.PLANET_COUNT;i++){
-      const p = { planetName: `Planet ${i+1}`, tiers: [] };
-      for (let t=0;t<CONFIG.TIERS_PER_PLANET;t++){
-        const tier = { tierName: `Tier ${t+1}`, achievements: [] };
-        for (let a=0;a<6;a++) tier.achievements.push(makeEmptyAchievement(i,t,a));
-        p.tiers.push(tier);
-      }
-      achievements.planets.push(p);
-    }
-  }
-  normalizeAchievements();
-}
-
-/* deterministic helpers */
-function goldenAngle(i) { return (i * 2.399963229728653) % (Math.PI * 2); }
-function deterministicAngle(planetIndex, tierIndex, nodeIndex) { return goldenAngle((planetIndex*7) + (tierIndex*11) + (nodeIndex*13)); }
-
-/* layout builder (spread-out) */
-let layout = { planets: [] };
-function buildLayout() {
-  layout.planets = [];
-  for (let i=0;i<CONFIG.PLANET_COUNT;i++){
-    const pdata = achievements.planets[i] || { planetName: `Planet ${i+1}`, tiers: [] };
-    // add a per-planet angular offset to avoid straight lines
-    const coreAngle = i * (Math.PI*2 / CONFIG.PLANET_COUNT) - Math.PI/2 + (Math.sin(i*1.3) * 0.35);
-    const px = Math.cos(coreAngle) * CONFIG.CORE_RADIUS;
-    const py = Math.sin(coreAngle) * CONFIG.CORE_RADIUS;
-    const planet = { index: i, x: px, y: py, angle: coreAngle, data: pdata, tiers: [] };
-
-    for (let t=0;t<CONFIG.TIERS_PER_PLANET;t++){
-      // spread tiers radially with larger angular offset to avoid overlap
-      const tierAngle = coreAngle + (t - (CONFIG.TIERS_PER_PLANET-1)/2) * 0.6 + (i * 0.12);
-      const dist = (t===0) ? 0 : (CONFIG.TIER_BASE_OFFSET + (t-1) * CONFIG.TIER_SPACING + i*20);
-      const tx = px + Math.cos(tierAngle) * dist;
-      const ty = py + Math.sin(tierAngle) * dist;
-      const tdata = pdata.tiers[t] || { tierName: `Tier ${t+1}`, achievements: [] };
-      const tier = { index: t, x: tx, y: ty, data: tdata, achievements: [] };
-
-      const pr = (t===0) ? (CONFIG.CORE_VISUAL/2) : (CONFIG.TIER_VISUAL/2);
-      const count = Array.isArray(tdata.achievements) ? tdata.achievements.length : 0;
-
-      // spread nodes around the planet surface using deterministic angles but offset
-      for (let n=0;n<count;n++){
-        const ang = deterministicAngle(i,t,n) + (n * 0.16);
-        const rmin = CONFIG.NODE_MIN_RF * pr, rmax = CONFIG.NODE_MAX_RF * pr;
-        const rfrac = 0.35 + ((n*29 + t*17 + i*19) % 100)/100 * 0.6;
-        const nr = rmin + (rmax - rmin) * ((rfrac - 0.35) / 0.6);
-        const nx = tx + Math.cos(ang) * nr;
-        const ny = ty + Math.sin(ang) * nr;
-        tier.achievements.push({ data: tdata.achievements[n], _pos: { x: nx, y: ny, r: CONFIG.NODE_ICON }, _hover: 0 });
-      }
-
-      planet.tiers.push(tier);
-    }
-
-    layout.planets.push(planet);
-  }
-}
-
-/* Camera & input */
-const camera = { x:0, y:0, scale: CONFIG.INITIAL_SCALE };
-const targetCam = { x:0, y:0, scale: CONFIG.INITIAL_SCALE };
-let easing = 0.14;
-let focused = { planet: null, tier: null };
-let hovered = null;
-let lockedPlanet = null;
-
-let pointer = { down:false, startX:0, startY:0, moved:false, startTime:0 };
-canvas.addEventListener('pointerdown', e => {
-  pointer.down = true; pointer.startX = e.clientX; pointer.startY = e.clientY; pointer.moved = false; pointer.startTime = Date.now();
-  canvas.setPointerCapture?.(e.pointerId);
-});
-canvas.addEventListener('pointermove', e => {
-  if (pointer.down) {
-    const dx = e.clientX - pointer.startX, dy = e.clientY - pointer.startY;
-    if (Math.hypot(dx,dy) > 8) pointer.moved = true;
-    if (pointer.moved && lockedPlanet === null) {
-      const worldDx = dx / targetCam.scale, worldDy = dy / targetCam.scale;
-      targetCam.x -= worldDx; targetCam.y -= worldDy;
-      pointer.startX = e.clientX; pointer.startY = e.clientY;
-    }
-  } else {
-    updateHover(e.clientX, e.clientY);
-  }
-});
-canvas.addEventListener('pointerup', e => {
-  canvas.releasePointerCapture?.(e.pointerId);
-  if (!pointer.moved && (Date.now() - pointer.startTime) < 400) handleTap(e.clientX, e.clientY);
-  pointer.down = false; pointer.moved = false;
-});
-canvas.addEventListener('wheel', e => {
-  e.preventDefault();
-  const delta = -e.deltaY * 0.0017;
-  const minScale = CONFIG.INITIAL_SCALE; // can't zoom out past initial
-  const newScale = clamp(targetCam.scale + delta, minScale, 8.0);
-
-  if (lockedPlanet !== null) {
-    targetCam.scale = newScale;
-    const p = layout.planets[lockedPlanet];
-    targetCam.x = -p.x; targetCam.y = -p.y;
-  } else {
-    const sx = e.clientX, sy = e.clientY;
-    const before = screenToWorld(sx, sy);
-    targetCam.scale = newScale;
-    const after = screenToWorld(sx, sy);
-    targetCam.x += (after.x - before.x);
-    targetCam.y += (after.y - before.y);
-  }
-
-  if (targetCam.scale < CONFIG.UNLOCK_SCALE_THRESHOLD && lockedPlanet !== null) {
-    lockedPlanet = null;
-    targetCam.x = 0; targetCam.y = 0;
-  }
-}, { passive:false });
-
-function screenToWorld(sx, sy) {
-  const cx = W/2 + camera.x * camera.scale;
-  const cy = H/2 + camera.y * camera.scale;
-  return { x: (sx - cx) / camera.scale, y: (sy - cy) / camera.scale };
-}
-function worldToScreen(wx, wy) {
-  const cx = W/2 + camera.x * camera.scale;
-  const cy = H/2 + camera.y * camera.scale;
-  return { x: cx + wx * camera.scale, y: cy + wy * camera.scale };
-}
-
-/* showNodes predicate: nodes are only interactable / drawn if this is true for that tier */
-function showNodesForTier(pi, ti) {
-  return camera.scale >= CONFIG.NODE_SHOW_SCALE || (focused.planet === pi && focused.tier === ti);
-}
-
-/* Update hover but only consider nodes when visible */
-function updateHover(sx, sy) {
-  const w = screenToWorld(sx, sy);
-  hovered = null;
-  outer:
-  for (const p of layout.planets) {
-    // check planet (core) hit
-    if (dist(w.x, w.y, p.x, p.y) < Math.max(30, CONFIG.CORE_VISUAL*0.16)) {
-      hovered = { type:'planet', planet: p.index }; break;
-    }
-    for (const t of p.tiers) {
-      // tier hit (only if visible enough to click)
-      if (dist(w.x, w.y, t.x, t.y) < Math.max(20, CONFIG.TIER_VISUAL*0.4)) {
-        hovered = { type:'tier', planet: p.index, tier: t.index }; break outer;
-      }
-      // achievements: only check if nodes are shown for this tier
-      if (!showNodesForTier(p.index, t.index)) continue;
-      for (let i=0;i<t.achievements.length;i++){
-        const a = t.achievements[i];
-        if (dist(w.x,w.y,a._pos.x,a._pos.y) <= Math.max(12, a._pos.r / camera.scale + 6)) {
-          hovered = { type:'achievement', planet: p.index, tier: t.index, ach: i }; break outer;
-        }
-      }
-    }
-  }
-
-  if (hovered) {
-    if (hovered.type === 'achievement') {
-      const node = layout.planets[hovered.planet].tiers[hovered.tier].achievements[hovered.ach];
-      showTitleForNode(node);
-    } else if (hovered.type === 'tier') {
-      const t = layout.planets[hovered.planet].tiers[hovered.tier];
-      showTitleAtPoint(t.x, t.y, (t.data.tierName||'').toUpperCase(), `${t.data.achievements.length || 0} NODES`);
-    } else if (hovered.type === 'planet') {
-      const p = layout.planets[hovered.planet];
-      showTitleAtPoint(p.x, p.y, (p.data.planetName||'').toUpperCase(), 'CLICK TO FOCUS');
-    }
-  } else hideTitle();
-}
-
-/* Tap / click handling */
-function handleTap(sx, sy) {
-  updateHover(sx, sy);
-  if (!hovered) { resetView(); return; }
-  if (hovered.type === 'achievement') openDetail(hovered);
-  else if (hovered.type === 'planet') {
-    const idx = hovered.planet;
-    lockedPlanet = idx;
-    zoomToPlanet(idx);
-  } else if (hovered.type === 'tier') {
-    lockedPlanet = hovered.planet;
-    zoomToTier(hovered.planet, hovered.tier);
-  }
-}
-
-/* Title card */
-function showTitleForNode(node) {
-  const s = worldToScreen(node._pos.x, node._pos.y);
-  titleCard.style.left = s.x + 'px';
-  titleCard.style.top = (s.y - 56) + 'px';
-  cardIcon.textContent = '★';
-  titleCardTitle.textContent = (node.data.title || '').toUpperCase();
-  titleCardSubtitle.textContent = (node.data.description || '').slice(0, 80);
-  titleCard.classList.add('show');
-}
-function showTitleAtPoint(wx, wy, title, sub='') {
-  const s = worldToScreen(wx, wy);
-  titleCard.style.left = s.x + 'px';
-  titleCard.style.top = (s.y - 56) + 'px';
-  cardIcon.textContent = '★';
-  titleCardTitle.textContent = title || '';
-  titleCardSubtitle.textContent = sub || '';
-  titleCard.classList.add('show');
-}
-function hideTitle() {
-  titleCard.classList.remove('show');
-}
-
-/* detail panel */
-let currentDetail = null;
-function openDetail(h) {
-  const a = layout.planets[h.planet].tiers[h.tier].achievements[h.ach];
-  if (!a) return;
-  currentDetail = { planet: h.planet, tier: h.tier, ach: h.ach };
-  detailTitle.textContent = (a.data.title || '').toUpperCase();
-  detailDesc.textContent = a.data.description || '';
-  detailPanel.classList.add('show');
-}
-function hideDetail() { detailPanel.classList.remove('show'); currentDetail = null; }
-function completeAchievement(detail) {
-  try {
-    const a = achievements.planets[detail.planet].tiers[detail.tier].achievements[detail.ach];
-    if (a) { a.status = 'completed'; a.dateCompleted = new Date().toISOString(); localStorage.setItem('progress', JSON.stringify(achievements)); }
-  } catch (e) { console.warn('complete failed', e); }
-}
-
-/* zoom helpers */
-function zoomToPlanet(idx) {
-  const p = layout.planets[idx];
-  const smin = Math.min(W, H);
-  const req = (smin * CONFIG.ZOOM_FILL_PCT) / CONFIG.CORE_VISUAL;
-  targetCam.x = -p.x; targetCam.y = -p.y; targetCam.scale = req * 1.02;
-  focused.planet = idx; focused.tier = null;
-  hideDetail(); hideTitle();
-}
-function zoomToTier(pi, ti) {
-  const t = layout.planets[pi].tiers[ti];
-  const smin = Math.min(W, H);
-  const req = (smin * CONFIG.ZOOM_FILL_PCT) / (CONFIG.TIER_VISUAL * 1.4);
-  targetCam.x = -t.x; targetCam.y = -t.y; targetCam.scale = req * 1.02;
-  focused.planet = pi; focused.tier = ti;
-  hideDetail(); hideTitle();
-}
-function resetView() {
-  targetCam.x = 0; targetCam.y = 0; targetCam.scale = CONFIG.INITIAL_SCALE;
-  focused.planet = null; focused.tier = null; lockedPlanet = null;
-  hideDetail(); hideTitle();
-}
-
-/* glow connector (improved visibility) */
-function controlPointFor(x1,y1,x2,y2, strength = 0.22) {
-  const mx = (x1 + x2)/2, my = (y1 + y2)/2;
-  const dx = x2 - x1, dy = y2 - y1;
-  const dist = Math.hypot(dx,dy) || 1;
-  const px = -dy / dist, py = dx / dist;
-  const offset = Math.min(dist * strength, 420);
-  return { x: mx + px * offset, y: my + py * offset };
-}
-function drawGlowingGradientPathWorld(aX,aY,bX,bY, accent) {
-  // map to screen coords for gradient
-  const sA = worldToScreen(aX,aY);
-  const sB = worldToScreen(bX,bY);
-  const cp = controlPointFor(sA.x, sA.y, sB.x, sB.y, 0.22);
-
-  const grad = ctx.createLinearGradient(sA.x, sA.y, sB.x, sB.y);
-  grad.addColorStop(0, hexWithAlpha(accent, 0.08));
-  grad.addColorStop(0.65, hexWithAlpha(accent, 0.45));
-  grad.addColorStop(1, hexWithAlpha('#ffffff', 0.95));
-
-  // outer soft pass
-  ctx.save();
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  ctx.globalAlpha = 0.14;
-  ctx.strokeStyle = grad;
-  ctx.lineWidth = CONFIG.GLOW_THICKNESS * 6 * Math.max(1, camera.scale / 1.2);
-  ctx.beginPath();
-  ctx.moveTo(sA.x, sA.y);
-  ctx.quadraticCurveTo(cp.x, cp.y, sB.x, sB.y);
-  ctx.stroke();
-  ctx.restore();
-
-  // mid pass
-  ctx.save();
-  ctx.globalAlpha = 0.32;
-  ctx.strokeStyle = grad;
-  ctx.lineWidth = CONFIG.GLOW_THICKNESS * 2.6;
-  ctx.beginPath();
-  ctx.moveTo(sA.x, sA.y);
-  ctx.quadraticCurveTo(cp.x, cp.y, sB.x, sB.y);
-  ctx.stroke();
-  ctx.restore();
-
-  // core line
-  ctx.save();
-  ctx.globalAlpha = 1;
-  ctx.strokeStyle = grad;
-  ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  ctx.moveTo(sA.x, sA.y);
-  ctx.quadraticCurveTo(cp.x, cp.y, sB.x, sB.y);
-  ctx.stroke();
-  ctx.restore();
-}
-function hexWithAlpha(hex, alpha) {
-  if (!hex) return `rgba(255,255,255,${alpha})`;
-  if (hex.startsWith('rgba')) return hex;
-  const h = hex.replace('#','');
-  const r = parseInt(h.substring(0,2),16), g = parseInt(h.substring(2,4),16), b = parseInt(h.substring(4,6),16);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
-
-/* utilities */
-function lerp(a,b,t){ return a + (b-a) * t; }
-function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
-function dist(x1,y1,x2,y2){ return Math.hypot(x1-x2, y1-y2); }
-
-/* render loop */
-let time = 0;
-function draw() {
-  time += 1/60;
-  // smooth camera
-  camera.x = lerp(camera.x, targetCam.x, easing);
-  camera.y = lerp(camera.y, targetCam.y, easing);
-  camera.scale = lerp(camera.scale, targetCam.scale, easing);
-
-  // if locked to planet keep center
-  if (lockedPlanet !== null) {
-    const p = layout.planets[lockedPlanet];
-    targetCam.x = -p.x; targetCam.y = -p.y;
-  }
-
-  // draw caches
-  ctx.clearRect(0,0,W,H);
-  if (starCache) ctx.drawImage(starCache, 0, 0, W, H);
-  if (orbitCache) ctx.drawImage(orbitCache, 0, 0, W, H);
-
-  // vanishing subtle glow at center
-  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#00c8ff';
-  ctx.save();
-  const vg = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.max(W,H)/2);
-  vg.addColorStop(0, hexWithAlpha(accent, 0.05));
-  vg.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = vg; ctx.fillRect(0,0,W,H);
-  ctx.restore();
-
-  // world transform
-  ctx.save();
-  ctx.translate(W/2 + camera.x * camera.scale, H/2 + camera.y * camera.scale);
-  ctx.scale(camera.scale, camera.scale);
-
-  // draw planets, tiers, nodes
-  for (const p of layout.planets) {
-    // core visual
-    if (IMG.planet) ctx.drawImage(IMG.planet, p.x - CONFIG.CORE_VISUAL/2, p.y - CONFIG.CORE_VISUAL/2, CONFIG.CORE_VISUAL, CONFIG.CORE_VISUAL);
-    else { ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(p.x,p.y,CONFIG.CORE_VISUAL/2,0,Math.PI*2); ctx.fill(); }
-
-    // label for planet
-    ctx.save(); ctx.fillStyle = '#fff'; ctx.font = 'bold 15px Electrolize, Arial'; ctx.textAlign = 'center';
-    ctx.fillText((p.data.planetName||'').toUpperCase(), p.x, p.y + CONFIG.CORE_VISUAL/2 + 20 / camera.scale); ctx.restore();
-
-    for (const t of p.tiers) {
-      // connectors from core->tier
-      drawGlowingGradientPathWorld(p.x, p.y, t.x, t.y, accent);
-
-      // tier visual
-      const size = CONFIG.TIER_VISUAL;
-      const key = t.index === 0 ? 'planet' : `tier${Math.min(5, t.index+1)}`;
-      if (t.index === 0 && IMG.planet) ctx.drawImage(IMG.planet, t.x - size/2, t.y - size/2, size, size);
-      else if (IMG[key]) ctx.drawImage(IMG[key], t.x - size/2, t.y - size/2, size, size);
-      else if (IMG.planet) ctx.drawImage(IMG.planet, t.x - size/2, t.y - size/2, size, size);
-      else { ctx.fillStyle='#333'; ctx.beginPath(); ctx.arc(t.x,t.y,size/2,0,Math.PI*2); ctx.fill(); }
-
-      // planethover overlay: only when hovering the planet CORE (tier index 0) and hovered is planet
-      if (hovered && hovered.type === 'planet' && hovered.planet === p.index && t.index === 0) {
-        if (IMG.planethover) {
-          ctx.save();
-          const hSize = size * 1.45;
-          ctx.globalAlpha = 0.36;
-          ctx.drawImage(IMG.planethover, t.x - hSize/2, t.y - hSize/2, hSize, hSize);
-          ctx.restore();
-        }
-      }
-
-      // junctions: only if outer tier (index>0) AND visible (zoomed or focused) AND hovered/focused this tier
-      if (t.index > 0) {
-        const showNodes = showNodesForTier(p.index, t.index);
-        const shouldShowJunction = showNodes && ((hovered && hovered.type === 'tier' && hovered.planet === p.index && hovered.tier === t.index) || (focused.planet === p.index && focused.tier === t.index));
-        if (shouldShowJunction) {
-          const dx = t.x - p.x, dy = t.y - p.y; const d = Math.hypot(dx,dy) || 1;
-          const jx = t.x + (dx/d) * (size/2 + 36);
-          const jy = t.y + (dy/d) * (size/2 + 36);
-          drawAtlas('junction', jx, jy, 28, 1);
-        }
-      }
-
-      // tier label always small
-      ctx.save(); ctx.fillStyle = '#fff'; ctx.font='11px Electrolize, Arial'; ctx.textAlign='center';
-      ctx.fillText((t.data.tierName||`Tier ${t.index+1}`).toUpperCase(), t.x, t.y - size/2 - 10); ctx.restore();
-
-      // nodes and node-to-node connecting glowing lines only when visible for this tier
-      const showNodes = showNodesForTier(p.index, t.index);
-      if (showNodes && t.achievements.length > 0) {
-        // connect sequential nodes with glowing lines (wrap-around)
-        for (let ni=0; ni<t.achievements.length; ni++) {
-          const a = t.achievements[ni];
-          const b = t.achievements[(ni+1) % t.achievements.length];
-          drawGlowingGradientPathWorld(a._pos.x, a._pos.y, b._pos.x, b._pos.y, accent);
-        }
-      }
-
-      // draw nodes (hologram under + icon on top) — icons only if showNodes
-      for (const node of t.achievements) {
-        const holoAlpha = node._hover || 0;
-        if (holoAlpha > 0.02) drawAtlas('hologram', node._pos.x, node._pos.y, Math.max(40, node._pos.r * 2.8), holoAlpha * 0.96);
-        if (showNodes) {
-          const ik = (node.data.status === 'locked') ? 'lock' : 'node';
-          drawAtlas(ik, node._pos.x, node._pos.y, CONFIG.NODE_ICON, 1);
-          if (camera.scale > 1.2) {
-            ctx.save(); ctx.fillStyle = '#fff'; ctx.font='11px Electrolize, Arial'; ctx.textAlign='left';
-            ctx.fillText((node.data.title||'').toUpperCase(), node._pos.x + CONFIG.NODE_LABEL_OFFSET, node._pos.y + 4);
-            ctx.restore();
-          }
-        }
-      }
-    }
-  }
-
-  ctx.restore();
-
-  // hover alpha transitions only for visible tiers — ensure invisible tiers' nodes _hover -> 0
-  for (const p of layout.planets) {
-    for (const t of p.tiers) {
-      const visible = showNodesForTier(p.index, t.index);
-      for (const a of t.achievements) {
-        const target = (hovered && hovered.type === 'achievement' && hovered.planet === p.index && hovered.tier === t.index && hovered.ach === t.achievements.indexOf(a)) ? 1 : 0;
-        // if not visible, target must be 0 (no hologram while hidden)
-        const finalTarget = visible ? target : 0;
-        a._hover = lerp(a._hover || 0, finalTarget, 0.16);
-      }
-    }
-  }
-
-  // unlock if zoomed out below threshold
-  if (lockedPlanet !== null && targetCam.scale < CONFIG.UNLOCK_SCALE_THRESHOLD) {
-    lockedPlanet = null;
-    targetCam.x = 0; targetCam.y = 0;
-  }
-
-  requestAnimationFrame(draw);
-}
-
-/* init sequence */
-async function init() {
-  document.documentElement.style.setProperty('--accent', (themeColorEl?.value) || '#00c8ff');
-
-  IMG.center = await loadImage(ASSETS.center);
-  IMG.planet = await loadImage(ASSETS.planet);
-  IMG.planethover = await loadImage(ASSETS.planethover);
-  IMG.tier2 = await loadImage(ASSETS.tier2);
-  IMG.tier3 = await loadImage(ASSETS.tier3);
-  IMG.tier4 = await loadImage(ASSETS.tier4);
-  IMG.tier5 = await loadImage(ASSETS.tier5);
-
-  await buildAtlas();
-  buildStarCache();
-  buildOrbitCache(Math.max(W,H) * 1.1);
-  await loadData();         // loads & normalizes achievements
-  buildLayout();            // now safe
-
-  camera.x = targetCam.x = 0; camera.y = targetCam.y = 0; camera.scale = targetCam.scale = CONFIG.INITIAL_SCALE;
-  requestAnimationFrame(draw);
-}
-init().catch(e => console.error('Init error', e));
-
-/* admin helpers (kept) */
-window.loginAdmin = function() {
-  const pass = document.getElementById('adminPassword')?.value;
-  if (pass === 'admin') {
-    let html = '';
-    achievements.planets.forEach((p,i) => {
-      html += `<h3>${p.planetName}</h3>`;
-      p.tiers.forEach((t,j) => {
-        html += `<h4>${t.tierName}</h4>`;
-        t.achievements.forEach((a,k) => {
-          html += `<div style="margin-bottom:6px;"><input style="width:45%;margin-right:6px" value="${(a.title||'')}" onchange="editTitle(${i},${j},${k},this.value)"><input style="width:45%" value="${(a.description||'')}" onchange="editDesc(${i},${j},${k},this.value)"><select onchange="editStatus(${i},${j},${k},this.value)"><option ${a.status==='locked'?'selected':''}>locked</option><option ${a.status==='available'?'selected':''}>available</option><option ${a.status==='completed'?'selected':''}>completed</option></select></div>`;
-        });
       });
     });
-    document.getElementById('editContent').innerHTML = html;
-    document.getElementById('adminPassword').style.display = 'none';
-  } else alert('Wrong password');
-};
-window.editTitle = (i,j,k,v)=>{ achievements.planets[i].tiers[j].achievements[k].title = v; localStorage.setItem('progress', JSON.stringify(achievements)); };
-window.editDesc = (i,j,k,v)=>{ achievements.planets[i].tiers[j].achievements[k].description = v; localStorage.setItem('progress', JSON.stringify(achievements)); };
-window.editStatus = (i,j,k,v)=>{ achievements.planets[i].tiers[j].achievements[k].status = v; achievements.planets[i].tiers[j].achievements[k].dateCompleted = v==='completed'? new Date().toISOString():null; localStorage.setItem('progress', JSON.stringify(achievements)); };
-window.downloadJson = ()=>{ const blob = new Blob([JSON.stringify(achievements,null,2)], { type:'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'achievements.json'; a.click(); };
-window.bulkUnlock = ()=>{ achievements.planets.forEach(p=>p.tiers.forEach(t=>t.achievements.forEach(a=>a.status='available'))); localStorage.setItem('progress', JSON.stringify(achievements)); alert('All unlocked'); };
-window.bulkReset = ()=>{ achievements.planets.forEach(p=>p.tiers.forEach((t,j)=>t.achievements.forEach(a=>{ a.status = j===0? 'available':'locked'; a.dateCompleted = null; }))); localStorage.setItem('progress', JSON.stringify(achievements)); alert('All reset'); };
+    CONN.forEach(c=>{ const a = findEntity(c.from), b = findEntity(c.to); if(!a||!b) return; const s = worldToScreen(a.x,a.y), t = worldToScreen(b.x,b.y); drawGlowLine(s.x,s.y,t.x,t.y,{style:c.style||'curved'}); });
+    ctx.restore();
+    if(hover){ const screen = worldToScreen(hover.wx,hover.wy); titleCard.style.left = (screen.x+12)+'px'; titleCard.style.top=(screen.y-36)+'px'; tcTitle.textContent=hover.label; tcSub.textContent=hover.sub||''; titleCard.style.display='flex'; } else titleCard.style.display='none';
+    requestAnimationFrame(draw);
+  }
+
+  // helpers: world/screen, findEntity, hover, picking, events (omitted here for brevity in generation)
+  function worldToScreen(wx,wy){ const cx=W/2 + cam.x*cam.scale, cy=H/2 + cam.y*cam.scale; return { x: cx + wx*cam.scale, y: cy + wy*cam.scale }; }
+  function screenToWorld(sx,sy){ const cx=W/2 + cam.x*cam.scale, cy=H/2 + cam.y*cam.scale; return { x: (sx-cx)/cam.scale, y: (sy-cy)/cam.scale }; }
+  function findEntity(id){ for(let ci=0; ci<ACH.planets.length; ci++){ const core=ACH.planets[ci]; if(core.id===id) return {x:core.x,y:core.y}; for(let ti=0; ti<core.tiers.length; ti++){ const tier=core.tiers[ti]; if(tier.id===id) return {x:tier.x,y:tier.y}; for(let ni=0; ni<tier.nodes.length; ni++){ const node=tier.nodes[ni]; if(node.id===id) return {x: tier.x+Math.cos(node.angle)*node.rad, y: tier.y+Math.sin(node.angle)*node.rad}; } } } return null; }
+
+  // (hover/picking/drag/line/save handlers) simple versions
+  canvas.addEventListener('pointermove',(e)=>{ const r=canvas.getBoundingClientRect(); const sx=e.clientX-r.left, sy=e.clientY-r.top; const w=screenToWorld(sx,sy); hover=null; for(let ci=0; ci<ACH.planets.length; ci++){ const core=ACH.planets[ci]; if(Math.hypot(w.x-core.x,w.y-core.y) < core.size/2){ hover={type:'core', core:ci, label:core.name, wx:core.x, wy:core.y}; break; } for(let ti=0; ti<core.tiers.length; ti++){ const tier=core.tiers[ti]; if(Math.hypot(w.x-tier.x,w.y-tier.y) < tier.size/2){ hover={type:'tier', core:ci, tier:ti, label:tier.name, wx:tier.x, wy:tier.y}; break; } if(focused.core===ci){ for(let ni=0; ni<tier.nodes.length; ni++){ const node=tier.nodes[ni]; const nx=tier.x+Math.cos(node.angle)*node.rad, ny=tier.y+Math.sin(node.angle)*node.rad; if(Math.hypot(w.x-nx,w.y-ny) < 10){ hover={type:'node', core:ci, tier:ti, node:ni, label:node.title, wx:nx, wy:ny, sub: node.description.slice(0,60)}; break; } } } if(hover) break; } if(hover) break; } });
+
+  canvas.addEventListener('click',(e)=>{ const r=canvas.getBoundingClientRect(); const sx=e.clientX-r.left, sy=e.clientY-r.top; const pick = hover; if(lineMode){ if(pick){ if(!pendingLine) pendingLine = pick; else{ CONN.push({from: pendingLine.type==='node' ? ACH.planets[pendingLine.core].tiers[pendingLine.tier].nodes[pendingLine.node].id : pendingLine.type==='tier'? ACH.planets[pendingLine.core].tiers[pendingLine.tier].id : ACH.planets[pendingLine.core].id, to: pick.type==='node' ? ACH.planets[pick.core].tiers[pick.tier].nodes[pick.node].id : pick.type==='tier'? ACH.planets[pick.core].tiers[pick.tier].id : ACH.planets[pick.core].id, type:'junction', style:'curved' }); pendingLine=null; jsonEditor.value = JSON.stringify(ACH,null,2); } } return; } if(pick && pick.type==='core'){ focused.core = pick.core; focused.tier=null; targetCam.x = -pick.wx; targetCam.y = -pick.wy; targetCam.scale=1.6; } else if(pick && pick.type==='tier'){ focused.core = pick.core; focused.tier = pick.tier; targetCam.x = -pick.wx; targetCam.y = -pick.wy; targetCam.scale=2.6; } else if(pick && pick.type==='node'){ const node = ACH.planets[pick.core].tiers[pick.tier].nodes[pick.node]; detailTitle.textContent = node.title; detailDesc.textContent = node.description; detailRoadmap.innerHTML = '<strong>Roadmap:</strong><br>'+node.roadmap.map((s,i)=>`<div>${i+1}. ${s}</div>`).join(''); detailTips.innerHTML = '<strong>Tips:</strong><br>'+node.tips.map(t=>`<div>• ${t}</div>`).join(''); detailCard.style.display='block'; } else { focused.core=null; focused.tier=null; targetCam={x:0,y:0,scale:CONFIG.ZOOM_INIT}; detailCard.style.display='none'; } });
+
+  // buttons
+  adminBtn.addEventListener('click', ()=>{ adminMode=!adminMode; adminPanel.style.display = adminMode ? 'flex' : 'none'; });
+  lineModeBtn.addEventListener('click', ()=>{ lineMode=!lineMode; lineModeBtn.textContent = 'Line Mode ' + (lineMode?'ON':'OFF'); pendingLine=null; });
+  dragModeBtn.addEventListener('click', ()=>{ dragMode=!dragMode; dragModeBtn.textContent = 'Drag Mode ' + (dragMode?'ON':'OFF'); });
+  reloadBtn.addEventListener('click', ()=>{ loadFiles(); });
+  saveBtn.addEventListener('click', ()=>{ try{ ACH = JSON.parse(jsonEditor.value); normalize(); alert('Saved to editor'); }catch(e){ alert('Invalid JSON'); } });
+  downloadBtn.addEventListener('click', ()=>{ const aBlob = new Blob([JSON.stringify(ACH,null,2)],{type:'application/json'}); const url = URL.createObjectURL(aBlob); const a=document.createElement('a'); a.href=url; a.download='achievements.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); });
+
+  // init
+  loadFiles().then(()=>{ buildCaches(); requestAnimationFrame(draw); });
+  window.addEventListener('resize', ()=>{ resize(); buildCaches(); });
+})();

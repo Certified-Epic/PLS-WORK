@@ -1,52 +1,33 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>final surely?</title>
-  <link href="https://fonts.googleapis.com/css2?family=Electrolize&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Ultimate Completionist</title>
+<link href="https://fonts.googleapis.com/css2?family=Electrolize&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header id="topbar">
-    <div class="brand">STAR CHART</div>
-    <nav class="controls">
-      <label>Theme <input id="themeColor" type="color" value="#00c8ff"></label>
-      <label>Mono <input id="monoToggle" type="checkbox"></label>
-      <label>Debug <input id="debugToggle" type="checkbox"></label>
-      <button id="resetView">Reset</button>
-    </nav>
-  </header>
-
-  <canvas id="starChart" aria-label="Star chart"></canvas>
-
-  <!-- Minecraft-style achievement/title card (icon placeholder left) -->
-  <div id="titleCard" class="title-card" aria-hidden="true">
-    <div id="cardIcon" class="card-icon">✧</div>
-    <div class="card-text">
-      <div id="titleCardTitle" class="card-title">ACHIEVEMENT TITLE</div>
-      <div id="titleCardSubtitle" class="card-sub">Short description or requirement</div>
-    </div>
-  </div>
-
-  <!-- Detail panel -->
-  <div id="detailPanel" class="detail-panel" aria-hidden="true">
-    <div class="detail-inner">
-      <button id="detailClose" class="close">✕</button>
-      <h2 id="detailTitle"></h2>
-      <p id="detailDesc"></p>
-      <div class="detail-actions">
-        <button id="completeBtn">Mark Complete</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="adminPanel" class="admin-panel" style="display:none;">
-    <input id="adminPassword" placeholder="admin password" type="password">
-    <button onclick="loginAdmin()">Login</button>
-    <div id="editContent"></div>
-  </div>
-
-  <script src="script.js"></script>
-</body>
-</html>
+<header class="topbar"><div class="brand">ULTIMATE COMPLETIONIST</div>
+<div class="controls">
+<label>Primary <input id="accentPrimary" type="color" value="#00ffc3"></label>
+<label>Secondary <input id="accentSecondary" type="color" value="#00aaff"></label>
+<button id="adminBtn">Admin</button>
+<button id="lineModeBtn">Line Mode</button>
+<button id="dragModeBtn">Drag Mode</button>
+<button id="downloadBtn">Export</button>
+</div></header>
+<main class="canvas-wrap">
+<canvas id="starChart"></canvas>
+<div id="uiOverlay" class="ui-overlay">
+  <div id="titleCard" class="title-card" style="display:none;"><img src="assets/titlecard_icon.png" class="tc-icon"><div class="tc-text"><div id="tc-title">TITLE</div><div id="tc-sub">sub</div></div></div>
+  <div id="detailCard" class="detail-card" style="display:none;"><h3 id="detailTitle"></h3><p id="detailDesc"></p><div id="detailRoadmap"></div><div id="detailTips"></div><button id="completeBtn">Mark Complete</button></div>
+</div>
+</main>
+<aside id="adminPanel" class="admin-panel" style="display:none;">
+<h2>Admin</h2>
+<button id="reloadBtn">Reload JSON</button><button id="saveBtn">Save Editor</button><button id="exportZipBtn">Export ZIP</button>
+<textarea id="jsonEditor"></textarea>
+<p>Drag Mode: move things. Line Mode: click A -> B to connect.</p>
+</aside>
+<script src="script.js"></script>
+</body></html>
