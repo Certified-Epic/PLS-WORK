@@ -1,33 +1,24 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Ultimate Completionist</title>
-<link href="https://fonts.googleapis.com/css2?family=Electrolize&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Warframe-Style Star Chart</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="topbar"><div class="brand">ULTIMATE COMPLETIONIST</div>
-<div class="controls">
-<label>Primary <input id="accentPrimary" type="color" value="#00ffc3"></label>
-<label>Secondary <input id="accentSecondary" type="color" value="#00aaff"></label>
-<button id="adminBtn">Admin</button>
-<button id="lineModeBtn">Line Mode</button>
-<button id="dragModeBtn">Drag Mode</button>
-<button id="downloadBtn">Export</button>
-</div></header>
-<main class="canvas-wrap">
-<canvas id="starChart"></canvas>
-<div id="uiOverlay" class="ui-overlay">
-  <div id="titleCard" class="title-card" style="display:none;"><img src="assets/titlecard_icon.png" class="tc-icon"><div class="tc-text"><div id="tc-title">TITLE</div><div id="tc-sub">sub</div></div></div>
-  <div id="detailCard" class="detail-card" style="display:none;"><h3 id="detailTitle"></h3><p id="detailDesc"></p><div id="detailRoadmap"></div><div id="detailTips"></div><button id="completeBtn">Mark Complete</button></div>
-</div>
-</main>
-<aside id="adminPanel" class="admin-panel" style="display:none;">
-<h2>Admin</h2>
-<button id="reloadBtn">Reload JSON</button><button id="saveBtn">Save Editor</button><button id="exportZipBtn">Export ZIP</button>
-<textarea id="jsonEditor"></textarea>
-<p>Drag Mode: move things. Line Mode: click A -> B to connect.</p>
-</aside>
-<script src="script.js"></script>
-</body></html>
+  <canvas id="starChart"></canvas>
+  <div id="achievementPopup" class="popup" style="display: none;"></div>
+  <div id="sidePanel" class="side-panel" style="display: none;">
+    <h2 id="panelTitle"></h2>
+    <ul id="taskList"></ul>
+  </div>
+  <div id="adminPanel" class="admin-panel" style="display: none;">
+    <input type="password" id="adminPassword" placeholder="Enter password">
+    <button onclick="loginAdmin()">Login</button>
+    <div id="editContent" style="display: none;"></div>
+  </div>
+  <button id="adminButton" onclick="showAdminPanel()">Admin</button>
+  <script src="script.js"></script>
+</body>
+</html>
