@@ -1,104 +1,550 @@
-// script.js (clean foundation)
-(() => {
-  const canvas = document.getElementById('starChart');
-  const ctx = canvas.getContext('2d');
-  let W, H, DPR; function resize(){ DPR = Math.max(1, window.devicePixelRatio||1); W = canvas.clientWidth; H = canvas.clientHeight; canvas.width = Math.floor(W*DPR); canvas.height = Math.floor(H*DPR); ctx.setTransform(DPR,0,0,DPR,0,0); } window.addEventListener('resize', resize); resize();
+const canvas = document.getElementById('starChart');
+const ctx = canvas.getContext('2d');
+let width, height;
 
-  // UI
-  const adminBtn = document.getElementById('adminBtn'), adminPanel = document.getElementById('adminPanel'), jsonEditor = document.getElementById('jsonEditor');
-  const reloadBtn = document.getElementById('reloadBtn'), saveBtn = document.getElementById('saveBtn');
-  const lineModeBtn = document.getElementById('lineModeBtn'), dragModeBtn = document.getElementById('dragModeBtn'), downloadBtn = document.getElementById('downloadBtn');
-  const titleCard = document.getElementById('titleCard'), tcTitle = document.getElementById('tc-title'), tcSub = document.getElementById('tc-sub');
-  const detailCard = document.getElementById('detailCard'), detailTitle = document.getElementById('detailTitle'), detailDesc = document.getElementById('detailDesc'), detailRoadmap = document.getElementById('detailRoadmap'), detailTips = document.getElementById('detailTips');
+function resize() {
+  width = window.innerWidth;
+  height = window.innerHeight;
+  canvas.width = width;
+  canvas.height = height;
+}
+window.addEventListener('resize', resize);
+resize();
 
-  // Data
-  let ACH = null, CONN = null, ASSETS = 'assets/';
-  const CONFIG = { CORE_COUNT:5, CORE_RADIUS:420, CORE_SIZE:140, TIER_STEP:140, ZOOM_INIT:0.38 };
+const colors = {
+  background: 'black',
+  stars: 'white',
+  line: 'white',
+  text: 'white',
+  glow: 'white',
+  pulse: 'rgba(255,255,255,0.5)',
+  ring: 'white'
+  // Customize here: change values to hex or rgba for different themes, e.g., text: '#00ff00' for green
+};
 
-  // Camera
-  let cam = { x:0, y:0, scale: CONFIG.ZOOM_INIT }, targetCam = {...cam}, easing = 0.14;
-  let focused = { core:null, tier:null }, hover=null;
-  let adminMode=false, lineMode=false, dragMode=false, pendingLine=null, dragTarget=null;
+const assets = {
+  center: new Image(),
+  planet: new Image(),
+  lock: new Image(),
+  pulse: new Image(),
+  node: new Image(),
+  junction: new Image(),
+};
+assets.center.src = './assets/center.png';
+assets.planet.src = './assets/planet.png';
+assets.lock.src = './assets/lock.png';
+assets.pulse.src = './assets/pulse.png';
+assets.node.src = './assets/node.png';
+assets.junction.src = './assets/junction.png';
 
-  async function loadFiles(){ ACH = await fetch('achievements.json').then(r=>r.json()).catch(()=>({planets:[]})); CONN = await fetch('connections.json').then(r=>r.json()).catch(()=>([])); normalize(); jsonEditor.value = JSON.stringify(ACH,null,2); }
-  function normalize(){ if(!ACH.planets) ACH.planets=[]; const coreNames=['Physical','Cerebral','Creative','Social','Moral']; for(let i=0;i<CONFIG.CORE_COUNT;i++){ if(!ACH.planets[i]) ACH.planets[i]={id:'core_'+(i+1),name:coreNames[i],x:null,y:null,size:CONFIG.CORE_SIZE,tiers:[]}; const core=ACH.planets[i]; const angle=i*(Math.PI*2/CONFIG.CORE_COUNT)-Math.PI/2; if(core.x===null) core.x=Math.cos(angle)*CONFIG.CORE_RADIUS; if(core.y===null) core.y=Math.sin(angle)*CONFIG.CORE_RADIUS; for(let t=0;t<5;t++){ if(!core.tiers[t]) core.tiers[t]={id:core.id+'_t'+(t+1),name:'T'+(t+1),orbit:(core.size/2)+(t+1)*CONFIG.TIER_STEP,angle:angle+(t*0.12),size:96,description:'',nodes:[]}; const tier=core.tiers[t]; tier.x=core.x+Math.cos(tier.angle)*tier.orbit; tier.y=core.y+Math.sin(tier.angle)*tier.orbit; } } }
+const sounds = {
+  hover: new Audio('./assets/hover.mp3'),
+  zoom: new Audio('./assets/zoom.mp3'),
+  background: new Audio('./assets/background.mp3'),
+};
+sounds.background.loop = true;
+sounds.background.volume = 0.5;
+sounds.background.play();
 
-  // caches
-  let starCache=null, orbitCache=null;
-  function buildCaches(){ starCache=document.createElement('canvas'); starCache.width=Math.floor(W*DPR); starCache.height=Math.floor(H*DPR); const sctx=starCache.getContext('2d'); sctx.scale(DPR,DPR); sctx.fillStyle='#000'; sctx.fillRect(0,0,W,H); for(let i=0;i<240;i++){ sctx.fillStyle='rgba(255,255,255,'+(0.1+Math.random()*0.9)+')'; sctx.fillRect(Math.random()*W,Math.random()*H,Math.random()*1.8+0.2,Math.random()*1.8+0.2); } orbitCache=document.createElement('canvas'); orbitCache.width=Math.floor(W*DPR); orbitCache.height=Math.floor(H*DPR); const octx=orbitCache.getContext('2d'); octx.scale(DPR,DPR); octx.clearRect(0,0,W,H); const rings=[220,360,520,700,900]; for(let r of rings){ octx.beginPath(); octx.strokeStyle='rgba(255,255,255,0.03)'; octx.lineWidth=1; octx.arc(W/2,H/2,r,0,Math.PI*2); octx.stroke(); } }
+let achievements = {};
+fetch('./achievements.json')
+  .then(response => response.json())
+  .then(data => {
+    achievements = data;
+    const saved = localStorage.getItem('progress');
+    if (saved) {
+      const progress = JSON.parse(saved);
+      progress.planets.forEach((p, i) => {
+        p.tiers.forEach((t, j) => {
+          t.achievements.forEach((a, k) => {
+            achievements.planets[i].tiers[j].achievements[k].status = a.status;
+            achievements.planets[i].tiers[j].achievements[k].dateCompleted = a.dateCompleted;
+          });
+        });
+      });
+    }
+  });
 
-  function worldToScreen(wx,wy){ const cx=W/2 + cam.x*cam.scale, cy=H/2 + cam.y*cam.scale; return { x: cx + wx*cam.scale, y: cy + wy*cam.scale }; }
-  function screenToWorld(sx,sy){ const cx=W/2 + cam.x*cam.scale, cy=H/2 + cam.y*cam.scale; return { x: (sx-cx)/cam.scale, y: (sy-cy)/cam.scale }; }
-  function lerp(a,b,t){return a+(b-a)*t} function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+let camera = { x: 0, y: 0, scale: 0.5 };
+let targetCamera = { x: 0, y: 0, scale: 0.5 };
+let easing = 0.1;
+let focusedCore = null;
+let focusedPlanet = null;
+let hovered = null;
 
-  function drawGlowLine(sx,sy,tx,ty,opts={style:'curved'}){
-    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent')||'#00ffc3';
-    const accent2 = getComputedStyle(document.documentElement).getPropertyValue('--accent2')||'#00aaff';
-    ctx.save();
-    const grad = ctx.createLinearGradient(sx,sy,tx,ty);
-    grad.addColorStop(0, 'rgba(0,0,0,0.06)'); grad.addColorStop(0.6, accent); grad.addColorStop(1, accent2);
-    ctx.lineCap='round'; ctx.lineJoin='round';
-    ctx.globalAlpha=0.12; ctx.strokeStyle=grad; ctx.lineWidth=10; ctx.beginPath();
-    if(opts.style==='curved'){ const cp = controlPoint(sx,sy,tx,ty,0.22); ctx.moveTo(sx,sy); ctx.quadraticCurveTo(cp.x,cp.y,tx,ty); } else { ctx.moveTo(sx,sy); ctx.lineTo(tx,ty); }
-    ctx.stroke();
-    ctx.globalAlpha=0.4; ctx.lineWidth=4; ctx.beginPath();
-    if(opts.style==='curved'){ const cp = controlPoint(sx,sy,tx,ty,0.18); ctx.moveTo(sx,sy); ctx.quadraticCurveTo(cp.x,cp.y,tx,ty); } else { ctx.moveTo(sx,sy); ctx.lineTo(tx,ty); }
-    ctx.stroke();
-    ctx.globalAlpha=1; ctx.lineWidth=1.2; ctx.beginPath();
-    if(opts.style==='curved'){ const cp = controlPoint(sx,sy,tx,ty,0.18); ctx.moveTo(sx,sy); ctx.quadraticCurveTo(cp.x,cp.y,tx,ty); } else { ctx.moveTo(sx,sy); ctx.lineTo(tx,ty); }
-    ctx.stroke();
-    // bright spot
-    const t = (performance.now()/1200) % 1; let bx,by; if(opts.style==='curved'){ const cp=controlPoint(sx,sy,tx,ty,0.18); const qx = (1-t)*(1-t)*sx + 2*(1-t)*t*cp.x + t*t*tx; const qy = (1-t)*(1-t)*sy + 2*(1-t)*t*cp.y + t*t*ty; bx=qx; by=qy; } else { bx = sx + (tx-sx)*t; by = sy + (ty-sy)*t; }
-    ctx.globalCompositeOperation='lighter'; const g = ctx.createRadialGradient(bx,by,0,bx,by,18); g.addColorStop(0, accent2); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(bx,by,18,0,Math.PI*2); ctx.fill(); ctx.globalCompositeOperation='source-over';
-    ctx.restore();
+const coreRadius = 500;
+const tierRadius = 250; // Increased to spread out tier planets
+const planetSize = 50;
+const tierSize = 30;
+const achievementSize = 10;
+const achievementRadius = 40; // Decreased to make achievements closer to the planet
+
+let starParticles = [];
+for (let i = 0; i < 200; i++) {
+  starParticles.push({
+    x: Math.random() * 2000 - 1000,
+    y: Math.random() * 2000 - 1000,
+    size: Math.random() * 2 + 1,
+    speed: Math.random() * 0.5 + 0.5,
+  });
+}
+
+// Precompute scattered angles for tiers and achievements to make it graph-like
+const tierAngles = [];
+const achievementAngles = [];
+for (let i = 0; i < 5; i++) {
+  tierAngles[i] = [];
+  achievementAngles[i] = [];
+  for (let j = 0; j < 5; j++) {
+    tierAngles[i][j] = j * (Math.PI * 2 / 5) + (Math.random() - 0.5) * 0.5; // Scattered offset for tiers
+    achievementAngles[i][j] = [];
+    for (let k = 0; k < 20; k++) { // Assuming ~20 achievements
+      achievementAngles[i][j][k] = k * (Math.PI * 2 / 20) + (Math.random() - 0.5) * 0.3; // Scattered for graph feel
+    }
   }
-  function controlPoint(x1,y1,x2,y2,str=0.22){ const mx=(x1+x2)/2,my=(y1+y2)/2; const dx=x2-x1, dy=y2-y1; const d=Math.hypot(dx,dy)||1; const px=-dy/d, py=dx/d; const off=Math.min(d*str,420); return { x: mx + px*off, y: my + py*off }; }
+}
 
-  // main draw loop
-  let last = performance.now();
-  function draw(now){
-    const dt = now - last; last = now;
-    cam.x = lerp(cam.x, targetCam.x, 0.12); cam.y = lerp(cam.y, targetCam.y, 0.12); cam.scale = lerp(cam.scale, targetCam.scale, 0.12);
-    ctx.clearRect(0,0,W,H); if(starCache) ctx.drawImage(starCache,0,0,W,H); if(orbitCache) ctx.drawImage(orbitCache,0,0,W,H);
-    ctx.save(); ctx.translate(W/2 + cam.x*cam.scale, H/2 + cam.y*cam.scale); ctx.scale(cam.scale, cam.scale);
-    ACH.planets.forEach((core,ci)=>{
-      ctx.save(); ctx.fillStyle='#0f1720'; ctx.beginPath(); ctx.arc(core.x,core.y,core.size/2,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.stroke(); ctx.restore();
-      core.tiers.forEach((tier,ti)=>{
-        tier.x = core.x + Math.cos(tier.angle)*tier.orbit; tier.y = core.y + Math.sin(tier.angle)*tier.orbit;
-        const sp = worldToScreen(core.x,core.y), tp = worldToScreen(tier.x,tier.y);
-        drawGlowLine(sp.x,sp.y,tp.x,tp.y,{style:'curved'});
-        ctx.save(); ctx.fillStyle='#11131a'; ctx.beginPath(); ctx.arc(tier.x,tier.y,tier.size/2,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.stroke(); ctx.restore();
-        const showNodes = cam.scale >= 1.1 && focused.core===ci;
-        if(showNodes){
-          tier.nodes.forEach((node,ni)=>{ const nx = tier.x + Math.cos(node.angle)*node.rad, ny = tier.y + Math.sin(node.angle)*node.rad; if(hover && hover.type==='node' && hover.core===ci && hover.tier===ti && hover.node===ni){ ctx.save(); ctx.globalAlpha=0.9; ctx.fillStyle='rgba(0,255,200,0.12)'; ctx.beginPath(); ctx.arc(nx,ny,18,0,Math.PI*2); ctx.fill(); ctx.restore(); } ctx.save(); ctx.fillStyle = node.status==='locked' ? 'rgba(255,255,255,0.25)' : '#fff'; ctx.beginPath(); ctx.arc(nx,ny,6,0,Math.PI*2); ctx.fill(); ctx.restore(); });
+let time = 0;
+
+function draw() {
+  time += 0.016;
+
+  camera.x += (targetCamera.x - camera.x) * easing;
+  camera.y += (targetCamera.y - camera.y) * easing;
+  camera.scale += (targetCamera.scale - camera.scale) * easing;
+
+  ctx.fillStyle = colors.background;
+  ctx.fillRect(0, 0, width, height);
+  ctx.save();
+  ctx.translate(width / 2 + camera.x * camera.scale, height / 2 + camera.y * camera.scale);
+  ctx.scale(camera.scale, camera.scale);
+
+  // Starfield
+  ctx.fillStyle = colors.stars;
+  for (let p of starParticles) {
+    ctx.globalAlpha = 0.5;
+    ctx.fillRect(p.x, p.y, p.size, p.size);
+    p.x -= p.speed * 0.1;
+    if (p.x < -1000) p.x = 1000;
+  }
+  ctx.globalAlpha = 1;
+
+  // Central grid-like orbital rings (multiple concentric circles for grid feel)
+  ctx.strokeStyle = colors.line;
+  ctx.lineWidth = 1 / camera.scale;
+  for (let r = coreRadius - 150; r <= coreRadius + 150; r += 50) {
+    ctx.globalAlpha = 0.3 + (coreRadius - r) / 300;
+    ctx.beginPath();
+    ctx.arc(0, 0, Math.max(r, 50), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // Central image
+  ctx.drawImage(assets.center, -50, -50, 100, 100);
+
+  if (achievements.planets) {
+    achievements.planets.forEach((planet, i) => {
+      const angle = i * (Math.PI * 2 / 5);
+      const px = Math.cos(angle) * coreRadius;
+      const py = Math.sin(angle) * coreRadius;
+
+      // Radial lines from center to core planets
+      ctx.strokeStyle = colors.pulse;
+      ctx.lineWidth = 2 / camera.scale;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(px, py);
+      ctx.stroke();
+
+      // Orbital rings for core (grid-like multiple rings)
+      ctx.strokeStyle = colors.line;
+      ctx.lineWidth = 1 / camera.scale;
+      for (let r = tierRadius - 50; r <= tierRadius + 50; r += 25) {
+        ctx.globalAlpha = 0.4;
+        ctx.beginPath();
+        ctx.arc(px, py, Math.max(r, 10), 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+
+      // Core planet
+      ctx.drawImage(assets.planet, px - planetSize / 2, py - planetSize / 2, planetSize, planetSize);
+
+      // Hover rings for core
+      if (hovered && hovered.type === 'core' && hovered.index === i) {
+        ctx.strokeStyle = colors.ring;
+        ctx.shadowColor = colors.glow;
+        ctx.shadowBlur = 5;
+        let ringAlpha = 0.5 + Math.sin(time * 2) * 0.3;
+        ctx.globalAlpha = ringAlpha;
+        ctx.beginPath();
+        ctx.arc(px, py, planetSize / 2 + 10, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(px, py, planetSize / 2 + 20, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+      }
+
+      // Label
+      if (camera.scale > 0.5) {
+        ctx.fillStyle = colors.text;
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(planet.planetName, px, py + planetSize / 2 + 10);
+      }
+
+      // Tier planets
+      planet.tiers.forEach((tier, j) => {
+        const tangle = tierAngles[i][j];
+        const tx = px + Math.cos(tangle) * tierRadius;
+        const ty = py + Math.sin(tangle) * tierRadius;
+
+        // Connecting path with glow
+        ctx.strokeStyle = colors.pulse;
+        ctx.lineWidth = 2 / camera.scale;
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.lineTo(tx, ty);
+        ctx.stroke();
+
+        // Tier planet
+        ctx.drawImage(assets.planet, tx - tierSize / 2, ty - tierSize / 2, tierSize, tierSize);
+
+        // Hover rings for tier
+        if (hovered && hovered.type === 'tier' && hovered.core === i && hovered.tier === j) {
+          ctx.strokeStyle = colors.ring;
+          ctx.shadowColor = colors.glow;
+          ctx.shadowBlur = 5;
+          let ringAlpha = 0.5 + Math.sin(time * 2) * 0.3;
+          ctx.globalAlpha = ringAlpha;
+          ctx.beginPath();
+          ctx.arc(tx, ty, tierSize / 2 + 10, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(tx, ty, tierSize / 2 + 20, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+          ctx.shadowBlur = 0;
+        }
+
+        // Label
+        if (camera.scale > 1) {
+          ctx.fillStyle = colors.text;
+          ctx.fillText(tier.tierName, tx, ty + tierSize / 2 + 10);
+        }
+
+        // Achievements if focused (closer to planet, scattered angles for graph feel)
+        if (focusedCore === i && focusedPlanet === j) {
+          const numAch = tier.achievements.length;
+          tier.achievements.forEach((ach, k) => {
+            const aangle = achievementAngles[i][j][k % achievementAngles[i][j].length]; // Reuse if more
+            const ax = tx + Math.cos(aangle) * achievementRadius;
+            const ay = ty + Math.sin(aangle) * achievementRadius;
+
+            // Branch with glow (graph edge)
+            ctx.shadowColor = colors.glow;
+            ctx.shadowBlur = 5;
+            ctx.strokeStyle = colors.line;
+            ctx.globalAlpha = 0.8;
+            ctx.beginPath();
+            ctx.moveTo(tx, ty);
+            ctx.lineTo(ax, ay);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // Data pulse (moving along edge)
+            const pulsePos = (Math.sin(time + k) + 1) / 2;
+            const pulseX = tx + (ax - tx) * pulsePos;
+            const pulseY = ty + (ay - ty) * pulsePos;
+            ctx.fillStyle = colors.pulse;
+            ctx.globalAlpha = 0.5 + Math.sin(time + k) * 0.5;
+            ctx.beginPath();
+            ctx.arc(pulseX, pulseY, 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+
+            // Achievement node (graph node)
+            if (ach.status === 'locked') {
+              ctx.drawImage(assets.lock, ax - achievementSize / 2, ay - achievementSize / 2, achievementSize, achievementSize);
+            } else if (ach.status === 'available') {
+              ctx.drawImage(assets.node, ax - achievementSize / 2, ay - achievementSize / 2, achievementSize, achievementSize);
+              const pulseSize = achievementSize + Math.sin(time * 2) * 2;
+              ctx.globalAlpha = 0.5 + Math.sin(time * 2) * 0.5;
+              ctx.drawImage(assets.pulse, ax - pulseSize / 2, ay - pulseSize / 2, pulseSize, pulseSize);
+              ctx.globalAlpha = 1;
+            } else {
+              ctx.drawImage(assets.node, ax - achievementSize / 2, ay - achievementSize / 2, achievementSize, achievementSize);
+            }
+          });
+        }
+
+        // Junction (placeholder on edge)
+        if (j < planet.tiers.length - 1) {
+          const jangle = (j + 0.5) * (Math.PI * 2 / 5) + (Math.random() - 0.5) * 0.2; // Scattered junction
+          const jx = px + Math.cos(jangle) * (tierRadius + 10);
+          const jy = py + Math.sin(jangle) * (tierRadius + 10);
+          ctx.drawImage(assets.junction, jx - 5, jy - 5, 10, 10);
+
+          // Hover rings for junction
+          if (hovered && hovered.type === 'junction' && hovered.core === i && hovered.tier === j) {
+            ctx.strokeStyle = colors.ring;
+            ctx.shadowColor = colors.glow;
+            ctx.shadowBlur = 5;
+            let ringAlpha = 0.5 + Math.sin(time * 2) * 0.3;
+            ctx.globalAlpha = ringAlpha;
+            ctx.beginPath();
+            ctx.arc(jx, jy, 10, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(jx, jy, 15, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+            ctx.shadowBlur = 0;
+          }
         }
       });
     });
-    CONN.forEach(c=>{ const a = findEntity(c.from), b = findEntity(c.to); if(!a||!b) return; const s = worldToScreen(a.x,a.y), t = worldToScreen(b.x,b.y); drawGlowLine(s.x,s.y,t.x,t.y,{style:c.style||'curved'}); });
-    ctx.restore();
-    if(hover){ const screen = worldToScreen(hover.wx,hover.wy); titleCard.style.left = (screen.x+12)+'px'; titleCard.style.top=(screen.y-36)+'px'; tcTitle.textContent=hover.label; tcSub.textContent=hover.sub||''; titleCard.style.display='flex'; } else titleCard.style.display='none';
-    requestAnimationFrame(draw);
   }
 
-  // helpers: world/screen, findEntity, hover, picking, events (omitted here for brevity in generation)
-  function worldToScreen(wx,wy){ const cx=W/2 + cam.x*cam.scale, cy=H/2 + cam.y*cam.scale; return { x: cx + wx*cam.scale, y: cy + wy*cam.scale }; }
-  function screenToWorld(sx,sy){ const cx=W/2 + cam.x*cam.scale, cy=H/2 + cam.y*cam.scale; return { x: (sx-cx)/cam.scale, y: (sy-cy)/cam.scale }; }
-  function findEntity(id){ for(let ci=0; ci<ACH.planets.length; ci++){ const core=ACH.planets[ci]; if(core.id===id) return {x:core.x,y:core.y}; for(let ti=0; ti<core.tiers.length; ti++){ const tier=core.tiers[ti]; if(tier.id===id) return {x:tier.x,y:tier.y}; for(let ni=0; ni<tier.nodes.length; ni++){ const node=tier.nodes[ni]; if(node.id===id) return {x: tier.x+Math.cos(node.angle)*node.rad, y: tier.y+Math.sin(node.angle)*node.rad}; } } } return null; }
+  ctx.restore();
+  requestAnimationFrame(draw);
+}
+draw();
 
-  // (hover/picking/drag/line/save handlers) simple versions
-  canvas.addEventListener('pointermove',(e)=>{ const r=canvas.getBoundingClientRect(); const sx=e.clientX-r.left, sy=e.clientY-r.top; const w=screenToWorld(sx,sy); hover=null; for(let ci=0; ci<ACH.planets.length; ci++){ const core=ACH.planets[ci]; if(Math.hypot(w.x-core.x,w.y-core.y) < core.size/2){ hover={type:'core', core:ci, label:core.name, wx:core.x, wy:core.y}; break; } for(let ti=0; ti<core.tiers.length; ti++){ const tier=core.tiers[ti]; if(Math.hypot(w.x-tier.x,w.y-tier.y) < tier.size/2){ hover={type:'tier', core:ci, tier:ti, label:tier.name, wx:tier.x, wy:tier.y}; break; } if(focused.core===ci){ for(let ni=0; ni<tier.nodes.length; ni++){ const node=tier.nodes[ni]; const nx=tier.x+Math.cos(node.angle)*node.rad, ny=tier.y+Math.sin(node.angle)*node.rad; if(Math.hypot(w.x-nx,w.y-ny) < 10){ hover={type:'node', core:ci, tier:ti, node:ni, label:node.title, wx:nx, wy:ny, sub: node.description.slice(0,60)}; break; } } } if(hover) break; } if(hover) break; } });
+// Interactions
+let isDragging = false;
+let startX, startY;
+canvas.addEventListener('mousedown', (e) => {
+  isDragging = true;
+  startX = e.clientX - targetCamera.x * targetCamera.scale;
+  startY = e.clientY - targetCamera.y * targetCamera.scale;
+});
 
-  canvas.addEventListener('click',(e)=>{ const r=canvas.getBoundingClientRect(); const sx=e.clientX-r.left, sy=e.clientY-r.top; const pick = hover; if(lineMode){ if(pick){ if(!pendingLine) pendingLine = pick; else{ CONN.push({from: pendingLine.type==='node' ? ACH.planets[pendingLine.core].tiers[pendingLine.tier].nodes[pendingLine.node].id : pendingLine.type==='tier'? ACH.planets[pendingLine.core].tiers[pendingLine.tier].id : ACH.planets[pendingLine.core].id, to: pick.type==='node' ? ACH.planets[pick.core].tiers[pick.tier].nodes[pick.node].id : pick.type==='tier'? ACH.planets[pick.core].tiers[pick.tier].id : ACH.planets[pick.core].id, type:'junction', style:'curved' }); pendingLine=null; jsonEditor.value = JSON.stringify(ACH,null,2); } } return; } if(pick && pick.type==='core'){ focused.core = pick.core; focused.tier=null; targetCam.x = -pick.wx; targetCam.y = -pick.wy; targetCam.scale=1.6; } else if(pick && pick.type==='tier'){ focused.core = pick.core; focused.tier = pick.tier; targetCam.x = -pick.wx; targetCam.y = -pick.wy; targetCam.scale=2.6; } else if(pick && pick.type==='node'){ const node = ACH.planets[pick.core].tiers[pick.tier].nodes[pick.node]; detailTitle.textContent = node.title; detailDesc.textContent = node.description; detailRoadmap.innerHTML = '<strong>Roadmap:</strong><br>'+node.roadmap.map((s,i)=>`<div>${i+1}. ${s}</div>`).join(''); detailTips.innerHTML = '<strong>Tips:</strong><br>'+node.tips.map(t=>`<div>• ${t}</div>`).join(''); detailCard.style.display='block'; } else { focused.core=null; focused.tier=null; targetCam={x:0,y:0,scale:CONFIG.ZOOM_INIT}; detailCard.style.display='none'; } });
+canvas.addEventListener('mousemove', (e) => {
+  if (isDragging) {
+    targetCamera.x = (e.clientX - startX) / targetCamera.scale;
+    targetCamera.y = (e.clientY - startY) / targetCamera.scale;
+  }
 
-  // buttons
-  adminBtn.addEventListener('click', ()=>{ adminMode=!adminMode; adminPanel.style.display = adminMode ? 'flex' : 'none'; });
-  lineModeBtn.addEventListener('click', ()=>{ lineMode=!lineMode; lineModeBtn.textContent = 'Line Mode ' + (lineMode?'ON':'OFF'); pendingLine=null; });
-  dragModeBtn.addEventListener('click', ()=>{ dragMode=!dragMode; dragModeBtn.textContent = 'Drag Mode ' + (dragMode?'ON':'OFF'); });
-  reloadBtn.addEventListener('click', ()=>{ loadFiles(); });
-  saveBtn.addEventListener('click', ()=>{ try{ ACH = JSON.parse(jsonEditor.value); normalize(); alert('Saved to editor'); }catch(e){ alert('Invalid JSON'); } });
-  downloadBtn.addEventListener('click', ()=>{ const aBlob = new Blob([JSON.stringify(ACH,null,2)],{type:'application/json'}); const url = URL.createObjectURL(aBlob); const a=document.createElement('a'); a.href=url; a.download='achievements.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); });
+  // Hover
+  const mx = (e.clientX - width / 2) / camera.scale - camera.x;
+  const my = (e.clientY - height / 2) / camera.scale - camera.y;
+  hovered = null;
+  let hoveredSound = false;
+  if (achievements.planets) {
+    achievements.planets.forEach((planet, i) => {
+      const angle = i * (Math.PI * 2 / 5);
+      const px = Math.cos(angle) * coreRadius;
+      const py = Math.sin(angle) * coreRadius;
+      if (Math.hypot(mx - px, my - py) < planetSize / 2) {
+        hovered = { type: 'core', index: i };
+        hoveredSound = true;
+      }
+      planet.tiers.forEach((tier, j) => {
+        const tangle = tierAngles[i][j];
+        const tx = px + Math.cos(tangle) * tierRadius;
+        const ty = py + Math.sin(tangle) * tierRadius;
+        if (Math.hypot(mx - tx, my - ty) < tierSize / 2) {
+          hovered = { type: 'tier', core: i, tier: j };
+          hoveredSound = true;
+        }
+        if (j < planet.tiers.length - 1) {
+          const jangle = (j + 0.5) * (Math.PI * 2 / 5) + (Math.random() - 0.5) * 0.2;
+          const jx = px + Math.cos(jangle) * (tierRadius + 10);
+          const jy = py + Math.sin(jangle) * (tierRadius + 10);
+          if (Math.hypot(mx - jx, my - jy) < 5) {
+            hovered = { type: 'junction', core: i, tier: j };
+            hoveredSound = true;
+          }
+        }
+        if (focusedCore === i && focusedPlanet === j) {
+          tier.achievements.forEach((ach, k) => {
+            const aangle = achievementAngles[i][j][k % achievementAngles[i][j].length];
+            const ax = tx + Math.cos(aangle) * achievementRadius;
+            const ay = ty + Math.sin(aangle) * achievementRadius;
+            if (Math.hypot(mx - ax, my - ay) < achievementSize / 2) {
+              hovered = { type: 'achievement', core: i, tier: j, ach: k };
+              hoveredSound = true;
+            }
+          });
+        }
+      });
+    });
+  }
+  if (hoveredSound) sounds.hover.play();
+});
 
-  // init
-  loadFiles().then(()=>{ buildCaches(); requestAnimationFrame(draw); });
-  window.addEventListener('resize', ()=>{ resize(); buildCaches(); });
-})();
+canvas.addEventListener('mouseup', (e) => {
+  isDragging = false;
+  if (hovered) {
+    if (hovered.type === 'core') {
+      const i = hovered.index;
+      const angle = i * (Math.PI * 2 / 5);
+      targetCamera.x = -Math.cos(angle) * coreRadius;
+      targetCamera.y = -Math.sin(angle) * coreRadius;
+      targetCamera.scale = 2;
+      focusedCore = i;
+      focusedPlanet = null;
+      sounds.zoom.play();
+    } else if (hovered.type === 'tier') {
+      const i = hovered.core;
+      const j = hovered.tier;
+      const angle = i * (Math.PI * 2 / 5);
+      const px = Math.cos(angle) * coreRadius;
+      const py = Math.sin(angle) * coreRadius;
+      const tangle = tierAngles[i][j];
+      const tx = px + Math.cos(tangle) * tierRadius;
+      const ty = py + Math.sin(tangle) * tierRadius;
+      targetCamera.x = -tx;
+      targetCamera.y = -ty;
+      targetCamera.scale = 5;
+      focusedCore = i;
+      focusedPlanet = j;
+      sounds.zoom.play();
+    } else if (hovered.type === 'achievement') {
+      const { core, tier, ach } = hovered;
+      const a = achievements.planets[core].tiers[tier].achievements[ach];
+      const content = `
+        <h2>${a.title}</h2>
+        <p>${a.description}</p>
+        <p>Status: ${a.status}</p>
+        ${a.status === 'available' ? `<button onclick="completeAchievement(${core}, ${tier}, ${ach})">Complete</button>` : ''}
+      `;
+      document.getElementById('achievementPopup').innerHTML = content;
+      document.getElementById('achievementPopup').style.display = 'block';
+    } else if (hovered.type === 'junction') {
+      const { core, tier } = hovered;
+      const currentTier = achievements.planets[core].tiers[tier];
+      let html = '';
+      currentTier.achievements.forEach(ach => {
+        html += `<li class="${ach.status === 'completed' ? 'completed' : ''}">${ach.title}</li>`;
+      });
+      document.getElementById('panelTitle').innerText = `${currentTier.tierName} Junction`;
+      document.getElementById('taskList').innerHTML = html;
+      document.getElementById('sidePanel').style.display = 'block';
+    }
+  }
+});
+
+canvas.addEventListener('wheel', (e) => {
+  const delta = -e.deltaY / 1000;
+  targetCamera.scale = Math.max(0.1, Math.min(10, targetCamera.scale + delta));
+  sounds.zoom.play();
+});
+
+// Touch support
+let touchStartX, touchStartY, touchDist;
+canvas.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 1) {
+    isDragging = true;
+    startX = e.touches[0].clientX - targetCamera.x * targetCamera.scale;
+    startY = e.touches[0].clientY - targetCamera.y * targetCamera.scale;
+  } else if (e.touches.length === 2) {
+    touchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+  }
+});
+
+canvas.addEventListener('touchmove', (e) => {
+  if (e.touches.length === 1 && isDragging) {
+    targetCamera.x = (e.touches[0].clientX - startX) / targetCamera.scale;
+    targetCamera.y = (e.touches[0].clientY - startY) / targetCamera.scale;
+  } else if (e.touches.length === 2) {
+    const newDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    const delta = (newDist - touchDist) / 1000;
+    targetCamera.scale = Math.max(0.1, Math.min(10, targetCamera.scale + delta));
+    touchDist = newDist;
+    sounds.zoom.play();
+  }
+});
+
+canvas.addEventListener('touchend', (e) => {
+  isDragging = false;
+});
+
+// Complete achievement
+window.completeAchievement = (core, tier, ach) => {
+  const a = achievements.planets[core].tiers[tier].achievements[ach];
+  a.status = 'completed';
+  a.dateCompleted = new Date().toISOString();
+  document.getElementById('achievementPopup').style.display = 'none';
+  localStorage.setItem('progress', JSON.stringify(achievements));
+  const allCompleted = achievements.planets[core].tiers[tier].achievements.every(a => a.status === 'completed');
+  if (allCompleted && tier < achievements.planets[core].tiers.length - 1) {
+    achievements.planets[core].tiers[tier + 1].achievements.forEach(a => {
+      if (a.status === 'locked') a.status = 'available';
+    });
+  }
+};
+
+// Admin panel
+const adminPanel = document.getElementById('adminPanel');
+const editContent = document.getElementById('editContent');
+window.showAdminPanel = () => {
+  adminPanel.style.display = 'block';
+};
+window.loginAdmin = () => {
+  const pass = document.getElementById('adminPassword').value;
+  if (pass === 'admin') {  // Change password here
+    let html = '';
+    achievements.planets.forEach((p, i) => {
+      html += `<h2>${p.planetName}</h2>`;
+      p.tiers.forEach((t, j) => {
+        html += `<h3>${t.tierName}</h3>`;
+        t.achievements.forEach((a, k) => {
+          html += `
+            <div>
+              <input type="text" value="${a.title}" oninput="editTitle(${i},${j},${k},this.value)">
+              <input type="text" value="${a.description}" oninput="editDesc(${i},${j},${k},this.value)">
+              <select onchange="editStatus(${i},${j},${k},this.value)">
+                <option ${a.status === 'locked' ? 'selected' : ''}>locked</option>
+                <option ${a.status === 'available' ? 'selected' : ''}>available</option>
+                <option ${a.status === 'completed' ? 'selected' : ''}>completed</option>
+              </select>
+            </div>
+          `;
+        });
+      });
+    });
+    html += '<button onclick="downloadJson()">Download JSON</button><button onclick="bulkUnlock()">Bulk Unlock All</button><button onclick="bulkReset()">Bulk Reset All</button>';
+    editContent.innerHTML = html;
+    document.getElementById('adminPassword').style.display = 'none';
+    editContent.style.display = 'block';
+  } else {
+    alert('Wrong password');
+  }
+};
+window.editTitle = (i, j, k, value) => { achievements.planets[i].tiers[j].achievements[k].title = value; };
+window.editDesc = (i, j, k, value) => { achievements.planets[i].tiers[j].achievements[k].description = value; };
+window.editStatus = (i, j, k, value) => {
+  achievements.planets[i].tiers[j].achievements[k].status = value;
+  achievements.planets[i].tiers[j].achievements[k].dateCompleted = value === 'completed' ? new Date().toISOString() : null;
+};
+window.downloadJson = () => {
+  const blob = new Blob([JSON.stringify(achievements, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'achievements.json';
+  a.click();
+};
+window.bulkUnlock = () => {
+  achievements.planets.forEach(p => p.tiers.forEach(t => t.achievements.forEach(a => a.status = 'available')));
+  alert('All unlocked');
+};
+window.bulkReset = () => {
+  achievements.planets.forEach(p => p.tiers.forEach((t, j) => t.achievements.forEach(a => {
+    a.status = j === 0 ? 'available' : 'locked';
+    a.dateCompleted = null;
+  })));
+  alert('All reset');
+};
+
+// Close side panel if needed (click outside or button)
+document.addEventListener('click', (e) => {
+  if (!document.getElementById('sidePanel').contains(e.target) && !canvas.contains(e.target)) {
+    document.getElementById('sidePanel').style.display = 'none';
+  }
+});
