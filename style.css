@@ -17,7 +17,7 @@ canvas {
   color: white;
   padding: 20px;
   border: 1px solid white;
-  z-index: 10;
+  z-index: 1000;
   max-width: 400px;
   text-align: center;
 }
@@ -30,7 +30,7 @@ canvas {
   color: white;
   padding: 20px;
   border: 1px solid white;
-  z-index: 10;
+  z-index: 900;
   max-height: 80vh;
   overflow: auto;
   width: 80%;
@@ -40,5 +40,67 @@ canvas {
   position: absolute;
   top: 10px;
   right: 10px;
-  z-index: 10;
+  z-index: 950;
 }
+
+/* Hover tooltip/card */
+.hover-card {
+  position: fixed;
+  pointer-events: none;
+  background: rgba(10,10,12,0.92);
+  color: #e6e6e6;
+  border: 1px solid rgba(255,255,255,0.2);
+  padding: 10px 12px;
+  border-radius: 6px;
+  box-shadow: 0 0 20px rgba(0,255,255,0.25), inset 0 0 12px rgba(0,255,255,0.08);
+  z-index: 1200; /* Above hologram and side panel */
+  max-width: 320px;
+  transform: translate(-50%, -120%);
+  backdrop-filter: blur(4px);
+}
+
+/* Side panel */
+.side-panel {
+  position: fixed;
+  right: 20px;
+  top: 20px;
+  bottom: 20px;
+  width: 360px;
+  background: rgba(8,8,10,0.9);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #eee;
+  z-index: 980;
+  padding: 12px;
+  display: none;
+}
+.side-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.side-panel #taskList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.side-panel #taskList li.completed { color: #6fe3a2; text-decoration: line-through; }
+
+/* Title card above hologram */
+.title-card {
+  position: fixed;
+  left: 50%;
+  top: 12%;
+  transform: translateX(-50%);
+  background: rgba(12,12,16,0.9);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 8px;
+  z-index: 1100;
+  min-width: 360px;
+  max-width: 60vw;
+  box-shadow: 0 0 28px rgba(0,200,255,0.22);
+}
+.title-card-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.title-card-body { margin-top: 8px; max-height: 40vh; overflow:auto; }
