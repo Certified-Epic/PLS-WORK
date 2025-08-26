@@ -1,0 +1,24 @@
+{
+  "name": "workspace",
+  "version": "1.0.0",
+  "description": "a",
+  "main": "script.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/epic-tm/Ultimate.Completionist.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/epic-tm/Ultimate.Completionist/issues"
+  },
+  "homepage": "https://github.com/epic-tm/Ultimate.Completionist#readme",
+  "dependencies": {
+    "gsap": "^3.13.0",
+    "ogl": "^1.0.11"
+  }
+}

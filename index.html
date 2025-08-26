@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div id="galaxy-bg" class="galaxy-bg"></div>
   <canvas id="starChart"></canvas>
   <div id="popup" class="popup" style="display: none;"></div>
   
@@ -40,6 +41,14 @@
     <div id="editContent" style="display: none;"></div>
   </div>
   <button id="adminButton" onclick="showAdminPanel()">Admin</button>
+  <script type="module">
+    import Galaxy from './Galaxy.js';
+    const container = document.getElementById('galaxy-bg');
+    const galaxy = new Galaxy(container, { mouseRepulsion: true, mouseInteraction: true, density: 1.5, glowIntensity: 0.5, saturation: 0.8, hueShift: 240 });
+    galaxy.start();
+    // Expose for debugging
+    window.__galaxy = galaxy;
+  </script>
   <script src="script.js"></script>
 
 </body>
