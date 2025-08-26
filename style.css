@@ -97,7 +97,7 @@ canvas {
   color: #fff;
   padding: 10px 14px;
   border-radius: 8px;
-  z-index: 1100;
+  z-index: 1300; /* Highest overlay */
   min-width: 360px;
   max-width: 60vw;
   box-shadow: 0 0 28px rgba(0,200,255,0.22);

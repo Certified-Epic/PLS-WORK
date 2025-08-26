@@ -29,6 +29,10 @@ const assets = {
   node: new Image(),
   junction: new Image(),
   hologram: new Image(),
+  tier2: new Image(),
+  tier3: new Image(),
+  tier4: new Image(),
+  tier5: new Image(),
 };
 assets.planet.src = './assets/planet.png';
 assets.lock.src = './assets/lock.png';
@@ -36,6 +40,10 @@ assets.pulse.src = './assets/pulse.png';
 assets.node.src = './assets/node.png';
 assets.junction.src = './assets/junction.png';
 assets.hologram.src = './assets/achievementnodehologram.png';
+assets.tier2.src = './assets/tier2.png';
+assets.tier3.src = './assets/tier3.png';
+assets.tier4.src = './assets/tier4.png';
+assets.tier5.src = './assets/tier5.png';
 
 const sounds = {
   hover: new Audio('./assets/hover.mp3'),
@@ -70,14 +78,12 @@ let camera = { x: 0, y: 0, scale: 0.25 };
 let targetCamera = { x: 0, y: 0, scale: 0.25 };
 let easing = 0.08;
 let focusedCore = null; // planet index in root ring
-let focusedPlanet = null; // tier index if focused deeper (optional for legacy logic)
+let focusedPlanet = null; // reserved
 let hovered = null;
 
 // Layout constants (wider spacing)
 const coreRadius = 1400; // wider planet distribution
-const tierRadius = 240;  // larger local orbit radius for tiers
 const planetSizeBase = 64; // base (world units) when zoomed out
-const tierSize = 34;
 const achievementSize = 12;
 
 // Starfield
@@ -106,7 +112,6 @@ if (expandTitleCardBtn) {
   expandTitleCardBtn.addEventListener('click', () => {
     const isOpen = titleCardBody.style.display !== 'none';
     titleCardBody.style.display = isOpen ? 'none' : 'block';
-    // simple expand/collapse animation via opacity
     titleCardBody.animate([
       { opacity: 0 },
       { opacity: 1 }
@@ -119,14 +124,21 @@ if (closeSidePanelBtn) {
   });
 }
 
-function drawGlowingLine(x1, y1, x2, y2, widthPx, dashLength, gapLength, offset) {
+function drawSolidGlowingLine(x1, y1, x2, y2, widthPx, glowStrength, pulseSpeed) {
   ctx.save();
-  ctx.strokeStyle = colors.line;
+  // Core line
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
   ctx.lineWidth = widthPx / camera.scale;
-  ctx.setLineDash([dashLength / camera.scale, gapLength / camera.scale]);
-  ctx.lineDashOffset = -offset / camera.scale;
-  ctx.shadowColor = colors.glow;
-  ctx.shadowBlur = 8 / camera.scale;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  // Outer glow pulse
+  const pulse = 0.6 + 0.4 * Math.sin(time * pulseSpeed);
+  ctx.strokeStyle = 'rgba(160,220,255,' + (0.30 * pulse) + ')';
+  ctx.shadowColor = 'rgba(120,200,255,0.9)';
+  ctx.shadowBlur = glowStrength / camera.scale;
+  ctx.lineWidth = (widthPx * 2.2) / camera.scale;
   ctx.beginPath();
   ctx.moveTo(x1, y1);
   ctx.lineTo(x2, y2);
@@ -157,8 +169,6 @@ function draw() {
   }
   ctx.globalAlpha = 1;
 
-  // No central image/circle (as requested)
-
   if (achievements.planets) {
     const planetCount = achievements.planets.length;
 
@@ -170,11 +180,11 @@ function draw() {
       return { px, py, angle };
     });
 
-    // Inter-planet connections with animated glowing lines
+    // Inter-planet connections with solid glowing pulsing lines
     for (let i = 0; i < planetCount; i++) {
       const a = planetPositions[i];
       const b = planetPositions[(i + 1) % planetCount];
-      drawGlowingLine(a.px, a.py, b.px, b.py, 3, 24, 40, time * 120);
+      drawSolidGlowingLine(a.px, a.py, b.px, b.py, 3, 16, 2.2);
     }
 
     achievements.planets.forEach((planet, i) => {
@@ -215,7 +225,6 @@ function draw() {
 
       // Junction icon visibility: only when hovering a planet
       if (hovered && hovered.type === 'core' && hovered.index === i) {
-        // Place a single junction icon just outside the planet edge at a fixed heading
         const jAngle = -Math.PI / 4;
         const jx = px + Math.cos(jAngle) * (planetSize / 2 + 28);
         const jy = py + Math.sin(jAngle) * (planetSize / 2 + 28);
@@ -225,15 +234,27 @@ function draw() {
       // When zoomed sufficiently into a planet, reveal its surface nodes gradually
       const reveal = Math.max(0, Math.min(1, (camera.scale - 2.6) / 2.0));
       if (reveal > 0) {
-        // Distribute tiers and achievements across the planet surface
-        const nodeRadius = Math.max(planetSize * 0.25, 80); // inner radius for nodes
+        // Draw tier images (2-5) scattered near planet edge (warframe-like)
+        const tierImgs = [assets.tier2, assets.tier3, assets.tier4, assets.tier5];
+        const offsets = [0.15, 0.38, 0.61, 0.84];
+        tierImgs.forEach((img, idx) => {
+          const ang = offsets[idx] * Math.PI * 2 + Math.sin(time * 0.6 + idx) * 0.05;
+          const r = (planetSize * 0.65) + 40 * (idx + 1);
+          const tx = px + Math.cos(ang) * r;
+          const ty = py + Math.sin(ang) * r;
+          const size = Math.max(56, planetSize * (0.12 + idx * 0.02));
+          ctx.globalAlpha = 0.9;
+          ctx.drawImage(img, tx - size / 2, ty - size / 2, size, size);
+          ctx.globalAlpha = 1;
+          // Subtle tether line from planet to tier image
+          drawSolidGlowingLine(px, py, tx, ty, 1.8, 10, 3.2);
+        });
+
+        // Distribute achievements across surface rings
         const ringCount = planet.tiers.length;
         planet.tiers.forEach((tier, j) => {
           const ringFrac = (j + 1) / (ringCount + 1);
           const ringR = ringFrac * (planetSize * 0.45);
-
-          // Glowing moving ring lines to suggest atmosphere entry
-          drawGlowingLine(px - ringR, py, px + ringR, py, 2, 18, 28, time * 90 + j * 10);
 
           const numAch = Math.max(1, tier.achievements.length);
           for (let k = 0; k < numAch; k++) {
@@ -246,18 +267,10 @@ function draw() {
             const nodeAlpha = 0.2 + 0.8 * reveal;
             const nodeSize = achievementSize * (0.6 + 0.8 * reveal);
 
-            // Connection glow pulse toward node (moving)
-            const t = (Math.sin(time * 2 + k) + 1) / 2;
-            const hx = px + (ax - px) * t;
-            const hy = py + (ay - py) * t;
-            ctx.fillStyle = colors.pulse;
-            ctx.globalAlpha = 0.4 * reveal;
-            ctx.beginPath();
-            ctx.arc(hx, hy, 2.4, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.globalAlpha = 1;
+            // Solid glowing pulsing line from planet center to node
+            drawSolidGlowingLine(px, py, ax, ay, 1.5, 9, 4.0);
 
-            // Draw node icon (locked/available/completed)
+            // Node icon
             if (a.status === 'locked') {
               ctx.globalAlpha = nodeAlpha;
               ctx.drawImage(assets.lock, ax - nodeSize / 2, ay - nodeSize / 2, nodeSize, nodeSize);
@@ -266,7 +279,6 @@ function draw() {
               ctx.globalAlpha = nodeAlpha;
               ctx.drawImage(assets.node, ax - nodeSize / 2, ay - nodeSize / 2, nodeSize, nodeSize);
               ctx.globalAlpha = 1;
-              // subtle pulse halo
               const pulseSize = nodeSize + Math.sin(time * 2) * 2 * reveal;
               ctx.globalAlpha = 0.5 * reveal;
               ctx.drawImage(assets.pulse, ax - pulseSize / 2, ay - pulseSize / 2, pulseSize, pulseSize);
@@ -318,7 +330,6 @@ canvas.addEventListener('mousemove', (e) => {
       const px = Math.cos(angle) * coreRadius;
       const py = Math.sin(angle) * coreRadius;
 
-      // Planet size consistent with draw logic
       const targetScreenFraction = 0.48;
       const desiredWorldSize = (targetScreenFraction * Math.min(width, height)) / camera.scale;
       const planetSize = camera.scale > 2.5 ? desiredWorldSize : planetSizeBase;
@@ -328,7 +339,6 @@ canvas.addEventListener('mousemove', (e) => {
         hoveredSound = true;
       }
 
-      // When zoomed into this planet, check achievement node hover
       const reveal = Math.max(0, Math.min(1, (camera.scale - 2.6) / 2.0));
       if (reveal > 0) {
         const ringCount = achievements.planets[i].tiers.length;
@@ -357,11 +367,11 @@ canvas.addEventListener('mousemove', (e) => {
     if (hovered.type === 'core') {
       const p = achievements.planets[hovered.index];
       hoverCard.innerHTML = `<strong>${p.planetName}</strong><div style="opacity:0.6">Hover to see junction indicator</div>`;
+      titleCard.style.display = 'none';
     } else if (hovered.type === 'achievement') {
       const { core, tier, ach } = hovered;
       const a = achievements.planets[core].tiers[tier].achievements[ach];
       hoverCard.innerHTML = `<strong>${a.title}</strong><div style="opacity:0.75">${a.status}</div>`;
-      // Title card above hologram
       titleCard.style.display = 'block';
       titleCardText.textContent = a.title;
       titleCardBody.innerHTML = `<div>${a.description}</div>`;
@@ -385,8 +395,7 @@ canvas.addEventListener('mouseup', (e) => {
       const py = Math.sin(angle) * coreRadius;
       targetCamera.x = -px;
       targetCamera.y = -py;
-      // Zoom such that planet occupies about 48% of the screen
-      const desiredScale = 3.2; // base ramp-in
+      const desiredScale = 3.2;
       targetCamera.scale = desiredScale;
       focusedCore = i;
       focusedPlanet = null;
