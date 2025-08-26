@@ -22,49 +22,6 @@ canvas {
   text-align: center;
 }
 
-.side-panel {
-  position: absolute;
-  top: 0;
-  left: 0;
-  background: rgba(0,0,0,0.8);
-  color: white;
-  padding: 20px;
-  width: 250px;
-  height: 100vh;
-  overflow: auto;
-  z-index: 10;
-  border-right: 1px solid rgba(255,255,255,0.2);
-}
-
-.side-panel h2 {
-  font-size: 1.5em;
-  margin-bottom: 10px;
-}
-
-.side-panel ul {
-  list-style: none;
-  padding: 0;
-}
-
-.side-panel li {
-  margin-bottom: 10px;
-  padding-left: 20px;
-  position: relative;
-}
-
-.side-panel li:before {
-  content: " ";
-  position: absolute;
-  left: 0;
-  top: 0;
-  font-size: 1.2em;
-}
-
-.side-panel li.completed:before {
-  content: "✔";
-  color: green;
-}
-
 .admin-panel {
   position: absolute;
   top: 10%;
