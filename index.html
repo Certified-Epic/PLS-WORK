@@ -9,6 +9,31 @@
 <body>
   <canvas id="starChart"></canvas>
   <div id="popup" class="popup" style="display: none;"></div>
+  
+  <!-- Hover tooltip/card (always above all) -->
+  <div id="hoverCard" class="hover-card" style="display:none"></div>
+
+  <!-- Achievement popup (modal center) -->
+  <div id="achievementPopup" class="popup" style="display:none"></div>
+
+  <!-- Side panel for junction requirements -->
+  <div id="sidePanel" class="side-panel" style="display:none">
+    <div class="side-panel-header">
+      <span id="panelTitle"></span>
+      <button id="closeSidePanel">✕</button>
+    </div>
+    <ul id="taskList"></ul>
+  </div>
+
+  <!-- Title card above hologram -->
+  <div id="titleCard" class="title-card" style="display:none">
+    <div class="title-card-header">
+      <span id="titleCardText"></span>
+      <button id="expandTitleCard">Details</button>
+    </div>
+    <div id="titleCardBody" class="title-card-body" style="display:none"></div>
+  </div>
+
   <div id="adminPanel" class="admin-panel" style="display: none;">
     <input type="password" id="adminPassword" placeholder="Enter password">
     <button onclick="loginAdmin()">Login</button>
@@ -16,5 +41,6 @@
   </div>
   <button id="adminButton" onclick="showAdminPanel()">Admin</button>
   <script src="script.js"></script>
+
 </body>
 </html>
