@@ -11,6 +11,17 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
+const colors = {
+  background: 'black',
+  stars: 'white',
+  line: 'white',
+  text: 'white',
+  glow: 'white',
+  pulse: 'rgba(255,255,255,0.5)',
+  ring: 'white'
+  // Customize here: change values to hex or rgba for different themes, e.g., text: '#00ff00' for green
+};
+
 const assets = {
   center: new Image(),
   planet: new Image(),
@@ -86,13 +97,14 @@ function draw() {
   camera.y += (targetCamera.y - camera.y) * easing;
   camera.scale += (targetCamera.scale - camera.scale) * easing;
 
-  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = colors.background;
+  ctx.fillRect(0, 0, width, height);
   ctx.save();
   ctx.translate(width / 2 + camera.x * camera.scale, height / 2 + camera.y * camera.scale);
   ctx.scale(camera.scale, camera.scale);
 
   // Starfield
-  ctx.fillStyle = 'white';
+  ctx.fillStyle = colors.stars;
   for (let p of starParticles) {
     ctx.globalAlpha = 0.5;
     ctx.fillRect(p.x, p.y, p.size, p.size);
@@ -111,7 +123,7 @@ function draw() {
       const py = Math.sin(angle) * coreRadius;
 
       // Orbital rings for core
-      ctx.strokeStyle = 'white';
+      ctx.strokeStyle = colors.line;
       ctx.lineWidth = 1 / camera.scale;
       ctx.globalAlpha = 0.5;
       ctx.beginPath();
@@ -125,9 +137,26 @@ function draw() {
       // Core planet
       ctx.drawImage(assets.planet, px - planetSize / 2, py - planetSize / 2, planetSize, planetSize);
 
+      // Hover rings for core
+      if (hovered && hovered.type === 'core' && hovered.index === i) {
+        ctx.strokeStyle = colors.ring;
+        ctx.shadowColor = colors.glow;
+        ctx.shadowBlur = 5;
+        let ringAlpha = 0.5 + Math.sin(time * 2) * 0.3;
+        ctx.globalAlpha = ringAlpha;
+        ctx.beginPath();
+        ctx.arc(px, py, planetSize / 2 + 10, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(px, py, planetSize / 2 + 20, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+      }
+
       // Label
       if (camera.scale > 0.5) {
-        ctx.fillStyle = 'white';
+        ctx.fillStyle = colors.text;
         ctx.font = 'bold 12px Arial';
         ctx.textAlign = 'center';
         ctx.fillText(planet.planetName, px, py + planetSize / 2 + 10);
@@ -135,12 +164,12 @@ function draw() {
 
       // Tier planets
       planet.tiers.forEach((tier, j) => {
-        const tangle = j * (Math.PI * 2 / 5); // Static
+        const tangle = j * (Math.PI * 2 / 5);
         const tx = px + Math.cos(tangle) * tierRadius;
         const ty = py + Math.sin(tangle) * tierRadius;
 
         // Connecting path with glow
-        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+        ctx.strokeStyle = colors.pulse;
         ctx.lineWidth = 2 / camera.scale;
         ctx.beginPath();
         ctx.moveTo(px, py);
@@ -150,8 +179,26 @@ function draw() {
         // Tier planet
         ctx.drawImage(assets.planet, tx - tierSize / 2, ty - tierSize / 2, tierSize, tierSize);
 
+        // Hover rings for tier
+        if (hovered && hovered.type === 'tier' && hovered.core === i && hovered.tier === j) {
+          ctx.strokeStyle = colors.ring;
+          ctx.shadowColor = colors.glow;
+          ctx.shadowBlur = 5;
+          let ringAlpha = 0.5 + Math.sin(time * 2) * 0.3;
+          ctx.globalAlpha = ringAlpha;
+          ctx.beginPath();
+          ctx.arc(tx, ty, tierSize / 2 + 10, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(tx, ty, tierSize / 2 + 20, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+          ctx.shadowBlur = 0;
+        }
+
         // Label
         if (camera.scale > 1) {
+          ctx.fillStyle = colors.text;
           ctx.fillText(tier.tierName, tx, ty + tierSize / 2 + 10);
         }
 
@@ -164,9 +211,9 @@ function draw() {
             const ay = ty + Math.sin(aangle) * 50;
 
             // Branch with glow
-            ctx.shadowColor = 'white';
+            ctx.shadowColor = colors.glow;
             ctx.shadowBlur = 5;
-            ctx.strokeStyle = 'white';
+            ctx.strokeStyle = colors.line;
             ctx.globalAlpha = 0.8;
             ctx.beginPath();
             ctx.moveTo(tx, ty);
@@ -178,6 +225,7 @@ function draw() {
             const pulsePos = (Math.sin(time + k) + 1) / 2;
             const pulseX = tx + (ax - tx) * pulsePos;
             const pulseY = ty + (ay - ty) * pulsePos;
+            ctx.fillStyle = colors.pulse;
             ctx.globalAlpha = 0.5 + Math.sin(time + k) * 0.5;
             ctx.beginPath();
             ctx.arc(pulseX, pulseY, 2, 0, Math.PI * 2);
@@ -205,6 +253,23 @@ function draw() {
           const jx = px + Math.cos(jangle) * (tierRadius + 10);
           const jy = py + Math.sin(jangle) * (tierRadius + 10);
           ctx.drawImage(assets.junction, jx - 5, jy - 5, 10, 10);
+
+          // Hover rings for junction
+          if (hovered && hovered.type === 'junction' && hovered.core === i && hovered.tier === j) {
+            ctx.strokeStyle = colors.ring;
+            ctx.shadowColor = colors.glow;
+            ctx.shadowBlur = 5;
+            let ringAlpha = 0.5 + Math.sin(time * 2) * 0.3;
+            ctx.globalAlpha = ringAlpha;
+            ctx.beginPath();
+            ctx.arc(jx, jy, 10, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(jx, jy, 15, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+            ctx.shadowBlur = 0;
+          }
         }
       });
     });
@@ -251,6 +316,15 @@ canvas.addEventListener('mousemove', (e) => {
         if (Math.hypot(mx - tx, my - ty) < tierSize / 2) {
           hovered = { type: 'tier', core: i, tier: j };
           hoveredSound = true;
+        }
+        if (j < planet.tiers.length - 1) {
+          const jangle = (j + 0.5) * (Math.PI * 2 / 5);
+          const jx = px + Math.cos(jangle) * (tierRadius + 10);
+          const jy = py + Math.sin(jangle) * (tierRadius + 10);
+          if (Math.hypot(mx - jx, my - jy) < 5) {
+            hovered = { type: 'junction', core: i, tier: j };
+            hoveredSound = true;
+          }
         }
         if (focusedCore === i && focusedPlanet === j) {
           tier.achievements.forEach((ach, k) => {
@@ -305,8 +379,19 @@ canvas.addEventListener('mouseup', (e) => {
         <p>Status: ${a.status}</p>
         ${a.status === 'available' ? `<button onclick="completeAchievement(${core}, ${tier}, ${ach})">Complete</button>` : ''}
       `;
-      document.getElementById('popup').innerHTML = content;
-      document.getElementById('popup').style.display = 'block';
+      document.getElementById('achievementPopup').innerHTML = content;
+      document.getElementById('achievementPopup').style.display = 'block';
+    } else if (hovered.type === 'junction') {
+      const { core, tier } = hovered;
+      const currentTier = achievements.planets[core].tiers[tier];
+      const nextTier = achievements.planets[core].tiers[tier + 1];
+      let html = '';
+      currentTier.achievements.forEach(ach => {
+        html += `<li class="${ach.status === 'completed' ? 'completed' : ''}">${ach.title}</li>`;
+      });
+      document.getElementById('panelTitle').innerText = `${currentTier.tierName} Junction`;
+      document.getElementById('taskList').innerHTML = html;
+      document.getElementById('sidePanel').style.display = 'block';
     }
   }
 });
@@ -351,7 +436,7 @@ window.completeAchievement = (core, tier, ach) => {
   const a = achievements.planets[core].tiers[tier].achievements[ach];
   a.status = 'completed';
   a.dateCompleted = new Date().toISOString();
-  document.getElementById('popup').style.display = 'none';
+  document.getElementById('achievementPopup').style.display = 'none';
   localStorage.setItem('progress', JSON.stringify(achievements));
   const allCompleted = achievements.planets[core].tiers[tier].achievements.every(a => a.status === 'completed');
   if (allCompleted && tier < achievements.planets[core].tiers.length - 1) {
@@ -423,3 +508,10 @@ window.bulkReset = () => {
   })));
   alert('All reset');
 };
+
+// Close side panel if needed (click outside or button)
+document.addEventListener('click', (e) => {
+  if (!document.getElementById('sidePanel').contains(e.target) && !canvas.contains(e.target)) {
+    document.getElementById('sidePanel').style.display = 'none';
+  }
+});
